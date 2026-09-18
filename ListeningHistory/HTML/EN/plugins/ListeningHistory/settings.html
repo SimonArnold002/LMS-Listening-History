@@ -1,0 +1,23 @@
+[% PROCESS settings/header.html %]
+
+<h2>[% 'PLUGIN_LH_SECTION_RECORDING' | string %]</h2>
+
+[% WRAPPER setting title="PLUGIN_LH_THRESHOLD" desc="PLUGIN_LH_THRESHOLD_DESC" %]
+<input type="number" name="pref_played_threshold" value="[% prefs.played_threshold %]" min="10" max="100" size="4"> %
+[% END %]
+
+[% WRAPPER setting title="PLUGIN_LH_GAP" desc="PLUGIN_LH_GAP_DESC" %]
+<input type="number" name="pref_session_gap_min" value="[% prefs.session_gap_min %]" min="1" max="1440" size="4"> [% 'PLUGIN_LH_MINUTES' | string %]
+[% END %]
+
+[% WRAPPER setting title="PLUGIN_LH_RADIO" desc="PLUGIN_LH_RADIO_DESC" %]
+<label><input type="checkbox" name="pref_record_radio" value="1" [% IF prefs.record_radio %]checked="checked"[% END %]> [% 'PLUGIN_LH_ENABLED' | string %]</label>
+[% END %]
+
+<h2>[% 'PLUGIN_LH_SECTION_STORAGE' | string %]</h2>
+
+[% WRAPPER setting title="PLUGIN_LH_RETENTION" desc="PLUGIN_LH_RETENTION_DESC" %]
+<input type="number" name="pref_retention_days" value="[% prefs.retention_days %]" min="0" max="36500" size="6"> [% 'PLUGIN_LH_DAYS' | string %]
+[% END %]
+
+[% PROCESS settings/footer.html %]

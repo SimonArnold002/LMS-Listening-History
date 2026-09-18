@@ -1,0 +1,259 @@
+#!/usr/bin/env perl
+# Tracker.pm end to end: fake players play fake tracks through the REAL subscription
+# callback and timers, and the assertions read what landed in a real SQLite store.
+#
+# Every grouping rule is asserted by its OUTCOME in the database (entry kinds, counts, which
+# urls were logged), never by reading Tracker's private state, so a tracker that recorded
+# nothing, or everything, fails here.
+use strict;
+use warnings;
+use FindBin;
+require "$FindBin::Bin/t_stubs.pl";
+
+main::lh_require(qw(DB Sources Tracker));
+main::lh_tempdb();
+Slim::Utils::Prefs::set_test_pref('plugin.listeninghistory', $_->[0], $_->[1])
+    for [played_threshold => 90], [session_gap_min => 30], [record_radio => 1];
+
+Plugins::ListeningHistory::Tracker->init();
+my ($CB) = map { $_->[0] } @Slim::Control::Request::SUBSCRIBED;
+ok('the tracker subscribes to playlist events', ref $CB eq 'CODE');
+
+# --- fakes -----------------------------------------------------------------------------
+{ package FakeClient;  sub new { my ($c, $id, $name) = @_; bless { id => $id, name => $name, elapsed => 0 }, $c }
+  sub id { $_[0]{id} } sub name { $_[0]{name} } sub playingSong { $_[0]{song} } sub songElapsedSeconds { $_[0]{elapsed} } }
+{ package FakeSong;    sub duration { $_[0]{duration} } sub track { $_[0]{track} } }
+{ package FakeTrack;   sub url { $_[0]{url} } sub title { $_[0]{title} } sub artistName { $_[0]{artist} }
+  sub album { $_[0]{album} } sub albumname { $_[0]{albumname} } sub remote { $_[0]{remote} } }
+{ package FakeAlbum;   sub id { $_[0]{id} } sub title { $_[0]{title} } sub year { $_[0]{year} }
+  sub artwork { $_[0]{artwork} } sub contributor { my $n = $_[0]{artist}; bless { n => $n }, 'FakeContrib' } }
+{ package FakeContrib; sub name { $_[0]{n} } }
+{ package FakeRequest; sub client { $_[0]{client} }
+  sub isCommand { my ($s, $spec) = @_; return scalar grep { $_ eq $s->{cmd} } @{ $spec->[1] } } }
+
+my %ALB;
+sub libAlbum {
+    my ($id, $title, $artist, $n) = @_;
+    Slim::Schema::add_test_album($id, map { [ "T$_", "file:///m/$id/$_.flac" ] } 1 .. $n);
+    return $ALB{$id} = bless { id => $id, title => $title, artist => $artist, year => 2001, artwork => "c$id" }, 'FakeAlbum';
+}
+sub libTrack {
+    my ($albumId, $n) = @_;
+    my $a = $ALB{$albumId};
+    return bless { url => "file:///m/$albumId/$n.flac", title => "T$n", artist => $a->{artist},
+                   album => $a, remote => 0 }, 'FakeTrack';
+}
+sub remoteTrack { my (%t) = @_; return bless { remote => 1, %t }, 'FakeTrack' }
+
+sub event { my ($client, $cmd) = @_; $CB->(bless { client => $client, cmd => $cmd }, 'FakeRequest') }
+
+# Start a track. With listen => 1 (the default) it then plays past the threshold and the
+# pending timer fires; with listen => 0 it is left pending.
+sub play {
+    my ($client, $track, %o) = @_;
+    my $dur = exists $o{duration} ? $o{duration} : 200;
+    $client->{song}    = bless { duration => $dur, track => $track }, 'FakeSong';
+    $client->{elapsed} = 0;
+    event($client, 'newsong');
+    return unless $o{listen} // 1;
+    $client->{elapsed} = $dur * 0.95;
+    Slim::Utils::Timers::fire_timer($client);
+}
+
+sub entries { Plugins::ListeningHistory::DB::recent(1000) }
+sub fresh {
+    my $h = Plugins::ListeningHistory::DB::dbh();
+    $h->do('DELETE FROM plays'); $h->do('DELETE FROM entries');
+    Slim::Utils::Timers::clear();
+    Plugins::ListeningHistory::Tracker->shutdown();
+    Plugins::ListeningHistory::Tracker->init();
+    ($CB) = map { $_->[0] } @Slim::Control::Request::SUBSCRIBED;
+}
+
+my $kitchen = FakeClient->new('aa:01', 'Kitchen');
+my $lounge  = FakeClient->new('aa:02', 'Lounge');
+libAlbum(10, 'Blue Album', 'Band A', 12);
+libAlbum(20, 'Red Album',  'Band B', 8);
+
+# --- one track --------------------------------------------------------------------------
+fresh();
+play($kitchen, libTrack(10, 1));
+my $e = entries();
+is('one track: one entry', scalar @$e, 1);
+is('one track: it is a TRACK entry', $e->[0]{kind}, 'track');
+is('one track: titled by the track', $e->[0]{title}, 'T1');
+is('one track: carries its album', $e->[0]{album}, 'Blue Album');
+is('one track: the player is recorded', $e->[0]{player_name}, 'Kitchen');
+is('one track: plays the file', $e->[0]{url}, 'file:///m/10/1.flac');
+
+# --- an album, back to back ---------------------------------------------------------------
+fresh();
+play($kitchen, libTrack(10, $_)) for 1 .. 3;
+$e = entries();
+is('album: three tracks make ONE entry', scalar @$e, 1);
+is('album: promoted to an ALBUM entry', $e->[0]{kind}, 'album');
+is('album: counts the tracks heard', $e->[0]{tracks_played}, 3);
+is('album: knows the album length from the library', $e->[0]{track_total}, 12);
+is('album: the track title is cleared', $e->[0]{title}, undef);
+is('album: replays by library album id', $e->[0]{ref}{album_id}, 10);
+is('album: all three plays are logged', scalar @{ Plugins::ListeningHistory::DB::plays($e->[0]{id}) }, 3);
+
+# --- A, B, then A again -------------------------------------------------------------------
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2));
+play($kitchen, libTrack(20, 1));
+play($kitchen, libTrack(10, 3));
+$e = entries();
+is('A,A,B,A: three entries', scalar @$e, 3);
+is('A,A,B,A: newest is the lone A track', join(',', map { $_->{kind} } @$e), 'track,track,album');
+
+# --- stop ends the session ----------------------------------------------------------------
+fresh();
+play($kitchen, libTrack(10, 1));
+event($kitchen, 'stop');
+play($kitchen, libTrack(10, 2));
+is('stop between tracks: two entries', scalar @{ entries() }, 2);
+is('stop between tracks: neither is an album', scalar(grep { $_->{kind} eq 'album' } @{ entries() }), 0);
+
+# --- the same track twice -----------------------------------------------------------------
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 1));
+$e = entries();
+is('same url twice: not merged into one album of 2', scalar @$e, 2);
+is('same url twice: both are track entries', join(',', map { $_->{kind} } @$e), 'track,track');
+
+# --- the session gap ----------------------------------------------------------------------
+fresh();
+play($kitchen, libTrack(10, 1));
+TestClock::advance(2 * 3600);
+play($kitchen, libTrack(10, 2));
+is('two hours apart: two entries', scalar @{ entries() }, 2);
+
+# --- two players --------------------------------------------------------------------------
+fresh();
+play($kitchen, libTrack(10, 1));
+play($lounge,  libTrack(10, 2));
+play($kitchen, libTrack(10, 2));
+$e = entries();
+is('two players: one entry each', scalar @$e, 2);
+my ($k) = grep { $_->{player_id} eq 'aa:01' } @$e;
+my ($l) = grep { $_->{player_id} eq 'aa:02' } @$e;
+is('two players: Kitchen became an album', $k->{kind}, 'album');
+is('two players: Lounge stayed a track', $l->{kind}, 'track');
+
+# --- a skipped track is never recorded ----------------------------------------------------
+fresh();
+play($kitchen, libTrack(10, 1), listen => 0);
+play($kitchen, libTrack(10, 2));
+$e = entries();
+is('skip: only the track listened to', scalar @$e, 1);
+is('skip: and it is track 2', $e->[0]{title}, 'T2');
+
+# --- a pause delays the mark --------------------------------------------------------------
+fresh();
+play($kitchen, libTrack(10, 1), listen => 0);
+$kitchen->{elapsed} = 30;                         # the timer comes round mid-track
+Slim::Utils::Timers::fire_timer($kitchen);
+is('pause: nothing recorded at 30s of 200', scalar @{ entries() }, 0);
+ok('pause: the mark is re-armed', scalar @Slim::Utils::Timers::ARMED);
+$kitchen->{elapsed} = 190;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('pause: recorded once really played', scalar @{ entries() }, 1);
+
+# --- streaming: grouped by the service album id -------------------------------------------
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = {
+    'qobuz://1.flac' => { title => 'Q1', artist => 'Q Band', album => 'Q Album', albumId => 'qa1', cover => 'https://img/q.jpg' },
+    'qobuz://2.flac' => { title => 'Q2', artist => 'Q Band', album => 'Q Album', albumId => 'qa1', cover => 'https://img/q.jpg' },
+};
+play($kitchen, remoteTrack(url => 'qobuz://1.flac', title => 'Q1'));
+play($kitchen, remoteTrack(url => 'qobuz://2.flac', title => 'Q2'));
+$e = entries();
+is('qobuz: one album entry', scalar @$e, 1);
+is('qobuz: kind', $e->[0]{kind}, 'album');
+is('qobuz: source', $e->[0]{source}, 'qobuz');
+is('qobuz: replays by the service album id', $e->[0]{ref}{svc_album_id}, 'qa1');
+is('qobuz: artwork from the handler', $e->[0]{artwork}, 'https://img/q.jpg');
+
+# --- streaming with no album id: grouped by album + FIRST credit ---------------------------
+fresh();
+$Slim::Player::ProtocolHandlers::META{deezer} = {
+    'deezer://1' => { title => 'D1', artist => 'Kygo, Khalid', album => 'Golden Hour' },
+    'deezer://2' => { title => 'D2', artist => 'Kygo',         album => 'Golden Hour' },
+    'deezer://3' => { title => 'D3', artist => 'Other Act',    album => 'Golden Hour' },
+};
+play($kitchen, remoteTrack(url => 'deezer://1'));
+play($kitchen, remoteTrack(url => 'deezer://2'));
+play($kitchen, remoteTrack(url => 'deezer://3'));
+$e = entries();
+is('deezer: a feature credit still groups; another artist does not', scalar @$e, 2);
+is('deezer: the grouped pair is an album of 2', (grep { $_->{kind} eq 'album' } @$e)[0]{tracks_played}, 2);
+
+# --- Spotty's error answer is never recorded -----------------------------------------------
+fresh();
+$Slim::Player::ProtocolHandlers::META{spotify} = { title => 'Please authorize this player', artist => 'Please authorize this player', duration => 0 };
+play($kitchen, remoteTrack(url => 'spotify://track:x'), duration => 0);
+is('spotify error text (no duration): nothing recorded', scalar @{ entries() }, 0);
+$Slim::Player::ProtocolHandlers::META{spotify} = { title => 'Real Song', artist => 'Real Artist', album => 'Real Album', duration => 180 };
+play($kitchen, remoteTrack(url => 'spotify://track:y'), duration => 180);
+is('spotify control: a real track IS recorded', scalar @{ entries() }, 1);
+
+# --- radio: one station entry per session --------------------------------------------------
+fresh();
+$Slim::Player::ProtocolHandlers::META{http} = { title => 'Now: Some Song' };
+my $station = remoteTrack(url => 'http://stream.example/radio', title => 'Radio Example');
+play($kitchen, $station, duration => 0, listen => 0);
+my $deadline = $Slim::Utils::Timers::ARMED[0]{when};
+for (1 .. 3) { TestClock::advance(20); event($kitchen, q(newsong)) }   # stream title changes, same url
+is(q(radio: title changes do not push the mark back), $Slim::Utils::Timers::ARMED[0]{when}, $deadline);
+is('radio: title changes keep ONE pending mark', scalar @Slim::Utils::Timers::ARMED, 1);
+Slim::Utils::Timers::fire_timer($kitchen);
+event($kitchen, 'newsong');                       # another title change after it is logged
+Slim::Utils::Timers::fire_timer($kitchen);
+$e = entries();
+is('radio: one entry', scalar @$e, 1);
+is('radio: a station entry', $e->[0]{kind}, 'station');
+is('radio: named after the station, not the song', $e->[0]{title}, 'Radio Example');
+is('radio: plays the station url', $e->[0]{url}, 'http://stream.example/radio');
+
+fresh();
+Slim::Utils::Prefs::set_test_pref('plugin.listeninghistory', record_radio => 0);
+play($kitchen, $station, duration => 0);
+is('radio off: nothing recorded', scalar @{ entries() }, 0);
+Slim::Utils::Prefs::set_test_pref('plugin.listeninghistory', record_radio => 1);
+
+# --- a remote track whose length is not known at the start is NOT timed as radio ----------
+# Song duration 0 at newsong, but the handler knows the length: the 90% rule applies.
+fresh();
+$Slim::Player::ProtocolHandlers::META{https} = { 'https://pod.example/ep1.mp3' =>
+    { title => 'Episode 1', artist => 'A Podcast', album => 'The Show', duration => 300 } };
+play($kitchen, remoteTrack(url => 'https://pod.example/ep1.mp3', title => 'Episode 1'), duration => 0, listen => 0);
+ok('podcast, handler knows the length: not armed at the 60s radio fallback',
+   ($Slim::Utils::Timers::ARMED[0]{when} // 0) - TestClock::now() > 200);
+
+# Neither knows at the start; the song learns its length later. A skip at 61s must not count.
+fresh();
+$Slim::Player::ProtocolHandlers::META{https} = { 'https://pod.example/ep2.mp3' => { title => 'Episode 2' } };
+play($kitchen, remoteTrack(url => 'https://pod.example/ep2.mp3', title => 'Episode 2'), duration => 0, listen => 0);
+$kitchen->{song}{duration} = 300;                  # the stream reports its length once playing
+$kitchen->{elapsed} = 61;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('podcast learns its length: not recorded at 61s of 300', scalar @{ entries() }, 0);
+$kitchen->{elapsed} = 280;
+Slim::Utils::Timers::fire_timer($kitchen);
+$e = entries();
+is('podcast learns its length: recorded once really played', scalar @$e, 1);
+is('podcast learns its length: as a TRACK, not a station', $e->[0]{kind} // '', 'track');
+
+# --- an entry removed mid-album is not written into ----------------------------------------
+fresh();
+play($kitchen, libTrack(10, 1));
+Plugins::ListeningHistory::DB::remove(entries()->[0]{id});
+play($kitchen, libTrack(10, 2));
+$e = entries();
+is('removed mid-album: the next track starts a new entry', scalar @$e, 1);
+is('removed mid-album: as a track, with its own title', $e->[0]{title}, 'T2');
+
+main::done();

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Listening History — LMS Plugin</title>
+<style>
+  :root {
+    --lb-purple: #353070;
+    --lb-purple-dark: #211d4d;
+    --lb-orange: #eb743b;
+    --ink: #1c1c28;
+    --muted: #5b5b6b;
+    --line: #e4e4ec;
+    --bg: #f7f7fa;
+    --card: #ffffff;
+    --code-bg: #f0f0f5;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--lb-orange); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header.hero {
+    background: linear-gradient(135deg, var(--lb-purple) 0%, var(--lb-purple-dark) 100%);
+    color: #fff;
+    padding: 56px 24px 48px;
+    text-align: center;
+  }
+  header.hero h1 { margin: 0 0 10px; font-size: 2.1rem; letter-spacing: -0.01em; }
+  header.hero p.tagline { margin: 0 auto; max-width: 660px; color: #d6d4ea; font-size: 1.08rem; }
+  header.hero p.tagline a { color: #ffb58c; }
+  .badges { margin-top: 22px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; padding: 5px 13px; border-radius: 999px;
+    font-size: 0.82rem; font-weight: 600;
+    background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.22);
+  }
+  .badge.accent { background: var(--lb-orange); border-color: var(--lb-orange); }
+  .hero-actions { margin-top: 26px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 11px 22px; border-radius: 8px; font-weight: 600; font-size: 0.95rem; }
+  .btn-primary { background: var(--lb-orange); color: #fff; }
+  .btn-primary:hover { text-decoration: none; filter: brightness(1.06); }
+  .btn-ghost { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.30); }
+  .btn-ghost:hover { text-decoration: none; background: rgba(255,255,255,0.20); }
+
+  main { max-width: 880px; margin: 0 auto; padding: 8px 24px 64px; }
+  section { margin-top: 44px; }
+  h2 {
+    font-size: 1.45rem; margin: 0 0 6px; padding-bottom: 8px;
+    border-bottom: 3px solid var(--lb-orange); display: inline-block;
+  }
+  h3 { font-size: 1.12rem; margin: 26px 0 6px; color: var(--lb-purple); }
+  p { margin: 10px 0; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; }
+  li > ul { margin-top: 5px; }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 14px 0;
+    background: var(--card); border-radius: 10px; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-size: 0.95rem;
+  }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--lb-purple); color: #fff; font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #fafafc; }
+  td strong { color: var(--lb-purple); }
+
+  code {
+    background: var(--code-bg); padding: 2px 6px; border-radius: 5px;
+    font-family: "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em;
+  }
+  pre {
+    background: var(--lb-purple-dark); color: #f3f1ff; padding: 16px 18px;
+    border-radius: 10px; overflow-x: auto; font-size: 0.9rem;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+
+  blockquote {
+    margin: 14px 0; padding: 12px 18px; background: #fff7f1;
+    border-left: 4px solid var(--lb-orange); border-radius: 0 8px 8px 0; color: var(--muted);
+  }
+  blockquote p { margin: 0; }
+
+  .feature-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .card h4 { margin: 0 0 6px; font-size: 1rem; color: var(--lb-purple); }
+  .card p { margin: 0; font-size: 0.9rem; color: var(--muted); }
+  .card .needs { display: block; margin-top: 8px; font-size: 0.78rem; font-weight: 600; color: var(--lb-orange); }
+
+  footer {
+    text-align: center; color: var(--muted); font-size: 0.88rem;
+    padding: 32px 24px 48px; border-top: 1px solid var(--line); margin-top: 48px;
+  }
+  @media (max-width: 600px) {
+    header.hero h1 { font-size: 1.6rem; }
+    main { padding: 8px 16px 48px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>Listening History — LMS Plugin</h1>
+  <p class="tagline">A plugin for <strong>Lyrion Music Server (LMS)</strong> that keeps a full history of what you've played, on <strong>every player</strong>, from your <strong>local library</strong> and from <strong>streaming services</strong> (Qobuz, Tidal, Deezer, Spotify and others), plus internet radio. Play a whole album and it's logged as <strong>one album</strong>, not a dozen separate tracks. Play one track and it's logged as that track. Every entry plays again with one tap, streaming ones included.</p>
+  <div class="badges">
+    <span class="badge accent">v0.1.3</span>
+    <span class="badge">LMS 9.0.0+</span>
+    <span class="badge">Material Skin</span>
+    <span class="badge">Library + Streaming + Radio</span>
+  </div>
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="ListeningHistory.zip">Download latest</a>
+    <a class="btn btn-ghost" href="#installation">Installation</a>
+  </div>
+</header>
+
+<main>
+<section id="features-at-a-glance">
+<h2>Features at a glance</h2>
+<div class="feature-cards">
+<div class="card"><h4>Albums stay albums</h4><p>Two or more tracks of the same album played back to back become one entry, e.g. "5 of 12 tracks"</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Every player</h4><p>Every player on the server is recorded, and each entry shows which one it played on</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Library and streaming</h4><p>Local files and any streaming service, in one history</p><span class="needs">Needs: The service's own plugin</span></div>
+<div class="card"><h4>Plays again</h4><p>Tap an entry to play it: a whole album, the single track, or the radio station</p><span class="needs">Needs: The service's own plugin</span></div>
+<div class="card"><h4>Material home shelf</h4><p>A <em>Listening History</em> row of your latest 50 entries on the home screen</p><span class="needs">Needs: Material Skin</span></div>
+<div class="card"><h4>Look further back</h4><p>Browse by date, artist, album, service or player, or search by text, a date or a date range</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Sort any list</h4><p>Newest first, artist A–Z or album A–Z</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Radio too</h4><p>A station is logged once per listening session</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Its own database</h4><p>Nothing is lost when the server restarts, and you choose how long to keep it</p><span class="needs">Needs: nothing</span></div>
+</div>
+</section>
+<section id="requirements">
+<h2>Requirements</h2>
+<ul>
+<li><strong>Lyrion Music Server 9.0.0+</strong>. The home shelf needs the <strong>Material Skin</strong>.
+</li>
+<li>To replay <strong>streaming</strong> entries, the matching service plugin installed and signed in.
+</li></ul>
+</section>
+<section id="installation">
+<h2>Installation</h2>
+<p>Add this repository URL under <strong>Settings → Plugins → Additional repositories</strong>:</p>
+<pre><code>https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/dev/repo.xml</code></pre>
+<p>Then install <strong>Listening History</strong> from the plugin list and restart the server.</p>
+</section>
+<section id="using-it">
+<h2>Using it</h2>
+<h3>What gets recorded</h3>
+<ul>
+<li><strong>A track counts once 90% of it has played.</strong> A track that reports no length counts after 60 seconds. Skip a track before then and it isn't recorded; pause it and the count simply waits. Podcast episodes and other web tracks follow the same rule, even when their length only becomes known after they start.
+</li>
+<li><strong>Back-to-back tracks from one album become one album entry.</strong> The first track appears as a track; as soon as a second track from the same album plays, the entry turns into an album and its count goes up with every further track.
+</li>
+<li><strong>A new album, a stop, or a cleared queue starts a new entry.</strong> So does a gap longer than 30 minutes between two tracks.
+</li>
+<li><strong>Radio</strong> is recorded once per listening session, named after the station, 60 seconds after it starts. Song-title changes within the stream don't add entries.
+</li></ul>
+<h3>Browsing</h3>
+<p>Open <strong>My Apps → Listening History</strong>:</p>
+<table>
+<thead><tr>
+<th>Menu</th>
+<th>What it shows</th>
+</tr></thead>
+<tbody>
+<tr><td><strong>Recently played</strong></td><td>Your latest 50 entries, the same as the home shelf</td></tr>
+<tr><td><strong>Search history</strong></td><td>Anything whose artist, album, track title or player name matches, including tracks played inside an album. Type a <strong>date</strong> or a <strong>date range</strong> to see what was played then (see below)</td></tr>
+<tr><td><strong>By date</strong></td><td>Today, Yesterday, then month → day</td></tr>
+<tr><td><strong>By artist</strong></td><td>Every artist you've played, with a count</td></tr>
+<tr><td><strong>By album</strong></td><td>Every album you've played from, with a count</td></tr>
+<tr><td><strong>By service</strong></td><td>Library, Qobuz, Spotify, Radio and so on, each with its own history</td></tr>
+<tr><td><strong>By player</strong></td><td>Each player, with its history</td></tr>
+</tbody></table>
+<p>Each row shows <strong>what</strong> was played (♫ for an album, with how many of its tracks you heard; ♪ for a track, with the album it's from), <strong>where it came from</strong>, <strong>which player</strong>, and <strong>when</strong>, as a full date and time, e.g. <em>18 Sep 2026, 14:32</em>.</p>
+<p>Every list starts with a <strong>Sorted by</strong> row: tap it to switch between <em>date</em> (newest first), <em>artist A–Z</em> and <em>album A–Z</em>. The choice is remembered. The home shelf always shows the newest first.</p>
+<h3>Searching by date</h3>
+<p>Dates are <strong>day first</strong>. Any of these find everything played on 18 September 2026:</p>
+<p><code>18/09/2026</code> · <code>18-09-2026</code> · <code>18.09.2026</code> · <code>18/9/26</code> · <code>2026-09-18</code> · <code>18 Sep 2026</code> · <code>18 September 2026</code></p>
+<p>For a <strong>range</strong>, put two dates either side of <code> - </code> or <code> to </code>. For example, <code>01/09/2026 - 15/09/2026</code> lists everything from the 1st to the 15th, both days included. A date that doesn't exist, like <code>31/02/2026</code>, is searched as ordinary text.</p>
+<h3>Playing an entry</h3>
+<ul>
+<li><strong>Album</strong>: plays the whole album. If the library or service can't provide the full album (Deezer and some others don't identify albums during playback), it plays the tracks you actually heard, in the order you heard them.
+</li>
+<li><strong>Track</strong>: plays that track.
+</li>
+<li><strong>Radio</strong>: plays the station.
+</li></ul>
+<p>Use the row's <strong>… → More → Remove from history</strong> to delete an entry.</p>
+</section>
+<section id="settings-reference">
+<h2>Settings reference</h2>
+<table>
+<thead><tr>
+<th>Setting</th>
+<th>Default</th>
+<th>What it does</th>
+</tr></thead>
+<tbody>
+<tr><td>Track counts as played at</td><td>90 %</td><td>How much of a track must play before it's recorded</td></tr>
+<tr><td>Album session gap</td><td>30 minutes</td><td>The longest pause between two tracks that still groups them into one album</td></tr>
+<tr><td>Record internet radio</td><td>On</td><td>Whether stations are recorded</td></tr>
+<tr><td>Keep history for</td><td>0 days (forever)</td><td>Entries older than this are removed once a day</td></tr>
+</tbody></table>
+</section>
+<section id="notes-limitations">
+<h2>Notes &amp; limitations</h2>
+<ul>
+<li><strong>History starts when the plugin is installed.</strong> Nothing is imported from before then.
+</li>
+<li><strong>Bandcamp albums replay as the tracks you heard</strong>, because a playing Bandcamp track doesn't tell us which album page it came from.
+</li>
+<li><strong>Radio detection is by stream type</strong>: any stream with no fixed length that isn't a known music service counts as radio.
+</li>
+<li><strong>Search is case-insensitive for plain letters only</strong> (A–Z). Accented letters and other scripts match with exact case.
+</li></ul>
+</section>
+</main>
+
+<footer>
+  <p>Listening History — LMS Plugin — a plugin for Lyrion Music Server ·
+  <a href="https://github.com/SimonArnold002/LMS-Listening-History">View on GitHub</a></p>
+</footer>
+
+</body>
+</html>

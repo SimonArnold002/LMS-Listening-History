@@ -1,0 +1,18 @@
+<extensions>
+  <details>
+    <title lang="EN">Listening History</title>
+  </details>
+  <plugins>
+    <plugin name="ListeningHistory" version="0.1.0" minTarget="9.0.0" maxTarget="*">
+      <title lang="EN">Listening History</title>
+      <desc lang="EN">A play history across every player, for library and streaming music: a played album is one entry, a lone track is a track entry, and every entry plays again</desc>
+      <category>musicservices</category>
+      <url>https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/dev/ListeningHistory.zip</url>
+      <icon>https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/main/ListeningHistory/HTML/EN/plugins/ListeningHistory/html/images/ListeningHistoryIcon.png</icon>
+      <link>https://simonarnold002.github.io/LMS-Listening-History/README.html</link>
+      <creator>CrystalGipsy</creator>
+      <email></email>
+      <sha></sha>
+    </plugin>
+  </plugins>
+</extensions>
