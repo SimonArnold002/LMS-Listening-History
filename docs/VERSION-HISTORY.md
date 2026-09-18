@@ -92,3 +92,26 @@ and sorting by album, artist or date. The shape of each was asked first (see CLA
     dates accepted, blank names not last, a captured (stale) sort value, and the By service tile
     removed. Each turns `t_browse` red.
   - The tile check was added after the first run of that mutation stayed green.
+
+## 1.0.0 — 2026-09-18 (dev; Simon: "this is locked")
+
+The feature set is locked at 1.0.0. The only code changes since 0.1.3 are the second review
+round's two fixes (CLAUDE.md §C):
+- **By service labels.** `deezerpodcast` is now "Deezer podcasts", not a second "Deezer" row.
+  `http` and `https` are both "Web stream". `Browse::_services` makes one row per LABEL, with
+  `sources => [...]` in its passthrough, and `DB::forSource` accepts a list.
+- **Sorted by row on the Default / Classic web skins.** Those skins have no `nextWindow`, so the
+  empty answer opened a blank page. `_webSkin($args)` now answers with `_webBounce` (Pitchfork's
+  rule, copied), which returns the browser to the re-sorted list. New string `PLUGIN_LH_WEB_BACK`.
+- Tests 205 → 214, each fix mutation-checked.
+- Ledger: back-fill from LMS's play data DECLINED; the logo stays `music_history`.
+- `repo.xml` is left untouched (still 0.1.0, empty sha) until Simon publishes, as agreed.
+
+## 1.0.1 — 2026-09-18 (dev) — service badge
+
+- `Sources::extid` and the row's `extid`: Material's service badge (upstream `d3f1d9227`). See
+  CLAUDE.md `THE SERVICE IS A BADGE`.
+- `entryRow` line2 drops the service name, "Library" included.
+- Tests 214 → 230. Mutation-checked: the row's extid removed, the service name put back in line2,
+  no `sounds`→`bbc`, no url-scheme fallback, no real album extid, and no `deezerpodcast` map. Each
+  turns `t_browse` red.

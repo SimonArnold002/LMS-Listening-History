@@ -436,15 +436,17 @@ sub entryRow {
         %play = (type => 'audio', url => $e->{url});
     }
 
-    push @sub, Plugins::ListeningHistory::Sources::sourceLabel($e->{source})
-        unless $kind eq 'station';
+    # No service name in line2 (Simon, 2026-09-18): the service is Material's badge on the
+    # artwork, from extid. Library rows carry none, as in Material's own library lists.
     push @sub, $e->{player_name} if defined $e->{player_name} && length $e->{player_name};
     push @sub, _when($e->{played_at});
+    my $extid = Plugins::ListeningHistory::Sources::extid($e);
 
     return {
         name        => $name,
         line2       => join(SEP, @sub),
         image       => $e->{artwork} || ICON,
+        (defined $extid ? (extid => $extid) : ()),
         %play,
         itemActions => {
             info => {

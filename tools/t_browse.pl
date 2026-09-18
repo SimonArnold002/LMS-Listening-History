@@ -59,6 +59,31 @@ like_('track row: names its album', $row{"Lib \x{2013} Solo"}{line2}, qr/from Lo
 is('station row: type audio', $row{'Jazz FM'}{type}, 'audio');
 is('station row: plays the station', $row{'Jazz FM'}{url}, 'http://jazz/stream');
 
+# --- service badge (extid) and no service name in line2 ---------------------------------------------
+{
+    my $R = sub { Plugins::ListeningHistory::Browse::entryRow(undef, { kind => 'track', played_at => 1, %{ $_[0] } }) };
+    ok('library row: no extid (no badge)', !exists $albumRow->{extid} && !exists $row{"Lib \x{2013} Solo"}{extid});
+    is('plain radio: no extid', $row{'Jazz FM'}{extid}, undef);
+    is('qobuz track: badge prefix', $R->({ source => 'qobuz', url => 'qobuz://1.flac' })->{extid}, 'qobuz:');
+    is('tidal track', $R->({ source => 'tidal', url => 'tidal://2.flc' })->{extid}, 'tidal:');
+    is('spotify track', $R->({ source => 'spotify', url => 'spotify://track:x' })->{extid}, 'spotify:');
+    is('deezer podcast wears the Deezer badge', $R->({ source => 'deezerpodcast', url => 'deezerpodcast://1' })->{extid}, 'deezer:');
+    is('bandcamp track', $R->({ source => 'bandcamp', url => 'bandcamp://x' })->{extid}, 'bandcamp:');
+    is('Radio Paradise station: badged from its url', $R->({ kind => 'station', source => 'radio', url => 'radioparadise://4.flac' })->{extid}, 'radioparadise:');
+    is('BBC Sounds station: sounds:// maps to the bbc badge', $R->({ kind => 'station', source => 'radio', url => 'sounds://live:bbc_6music' })->{extid}, 'bbc:');
+    is('a plain web track: no badge', $R->({ source => 'https', url => 'https://x/1.mp3' })->{extid}, undef);
+    my $qa = add(kind => 'album', source => 'qobuz', artist => 'Q', album => 'Q LP', url => 'qobuz://9.flac',
+                 ref => { svc_album_id => 'abc123', svc => 'qobuz' });
+    my ($qrow) = grep { ($_->{name} // '') eq "Q \x{2013} Q LP" } @{ feed(\&Plugins::ListeningHistory::Browse::_recent, {}) };
+    is('album row with the service album id: the real extid, through the DB', $qrow->{extid}, 'qobuz:album:abc123');
+    is('album row with no id: bare prefix', $R->({ kind => 'album', source => 'deezer', url => 'deezer://1.mp3' })->{extid}, 'deezer:');
+    my $qt = $R->({ source => 'qobuz', url => 'qobuz://1.flac', player_name => 'Kitchen' });
+    unlike_('line2 no longer names the service', $qt->{line2}, qr/Qobuz/);
+    unlike_('line2 no longer says Library', $row{"Lib \x{2013} Solo"}{line2}, qr/Library/);
+    like_('line2 still carries the player (control)', $qt->{line2}, qr/Kitchen/);
+    Plugins::ListeningHistory::DB::remove($qa);
+}
+
 # --- album resolution ----------------------------------------------------------------------------------
 my $tracks = feed($albumRow->{url}, {}, $albumRow->{passthrough}[0]);
 is('library album: the WHOLE album, not just what was played', join(',', map { $_->{url} } @$tracks),
@@ -260,5 +285,6 @@ is('settings: junk gap falls back to 30', $p->get('session_gap_min'), 30);
 is('settings: retention kept', $p->get('retention_days'), 14);
 
 sub like_ { my ($d, $got, $re) = @_; is($d, (defined $got && $got =~ $re) ? 1 : 0, 1) or print "     ($got)\n" }
+sub unlike_ { my ($d, $got, $re) = @_; is($d, (defined $got && $got !~ $re) ? 1 : 0, 1) or print "     (" . ($got // 'undef') . ")\n" }
 
 main::done();

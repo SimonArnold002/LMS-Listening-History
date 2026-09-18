@@ -33,6 +33,9 @@ grep -n "_record\|album_key" CLAUDE.md
 | replay code copied from LL, not shared | deliberate | `COPIED, NOT SHARED` |
 | `ORDER BY … id DESC` tie-break untestable | known; index gives the same order | `THE TIE-BREAK CANNOT BE PINNED` |
 | `LIST_CAP` 1000 per browse list | deliberate, and says so on the list | `LIST_CAP` |
+| service badge `Sources::extid` / row `extid`; NO service name in `entryRow` line2 | **DECIDED by Simon 2026-09-18** (1.0.1) | `THE SERVICE IS A BADGE` |
+| back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
+| app/shelf logo `ListeningHistoryIcon` = Google `music_history`, not Material's `history` glyph | **KEPT by Simon 2026-09-18** | `THE LOGO STAYS` |
 | "More by this artist" context entry | DROPPED at build; By artist covers it | `MORE BY THIS ARTIST` |
 | radio detection, Tidal/Deezer/Spotify album nodes, live Material rendering | **UNVERIFIED LIVE** — §B | `UNVERIFIED LIVE` |
 
@@ -108,6 +111,29 @@ can be DISPROVEN. Closing a round is not a suppression.
   It stays so the order is guaranteed by the query, not by the planner.
 - **`LIST_CAP`** (1000) bounds every browse list. A capped list ends with a text row saying so and
   pointing at By date. The home shelf and Recently played are 50, fixed (Simon's spec).
+- **THE SERVICE IS A BADGE — Simon, 2026-09-18 (1.0.1).** `Browse::entryRow`
+  no longer writes the service name (`sourceLabel`) into line2, and that includes "Library". Every
+  row with a service carries `extid` (`Sources::extid`), and Material draws its service badge on the
+  artwork from the part before the first `:`, looked up in `emblems.json`.
+  - Material: upstream `d3f1d9227` (2026-09-18) maps a SlimBrowse row's extid to an emblem.
+  - LMS: 9.1 `Slim/Control/XMLBrowser.pm:1176` passes the feed item's extid through.
+  - Where the prefix comes from: the stored source first (qobuz, tidal, deezer, deezerpodcast→deezer,
+    spotify, bandcamp), else the url scheme (radioparadise, sounds→bbc, youtube, ytm, pandora).
+  - What the row carries: an album row with `svc_album_id` gets the real `<svc>:album:<id>`, any
+    other badged row gets the bare `<svc>:`. On a SlimBrowse row Material reads only the prefix. Its
+    favourite-url use of extid is gated on library `album_id:` ids, which these rows never have.
+  - What gets no badge: library rows, plain radio and plain web streams, the same as Material's own
+    library lists.
+  - Accepted consequence: on a Material without `d3f1d9227`, and on the web skins, a row no longer
+    shows its service at all. By service still groups by it.
+- **NO BACK-FILL FROM LMS — declined by Simon, 2026-09-18.** An import from LMS's persistent DB
+  was offered: `tracks_persistent` holds only ONE `lastplayed` + a `playcount` per LIBRARY track
+  (no player, no earlier plays, almost certainly no streaming or radio), so it could only rebuild a
+  lossy "last time each track played" history. Simon: leave it. Do not re-propose without a new
+  data source that holds real per-play history.
+- **THE LOGO STAYS — Simon, 2026-09-18.** Swapping `ListeningHistoryIcon.{svg,_svg.png,.png}` for
+  Material's own Recently Played glyph (`history`, font glyph `uniE889`, `browse-resp.js`
+  `icon:"history"`) was started and stopped: keep Google's `music_history`.
 - **MORE BY THIS ARTIST** was in the plan's context menu and was dropped at build time to keep
   the menu to one CLI action; By artist already lists the same rows. It would need a `go` into a
   query that returns rows (LL's `buy` shape). Re-add only if Simon asks. The menu holds Remove
@@ -123,6 +149,8 @@ can be DISPROVEN. Closing a round is not a suppression.
   - Station naming from `$track->title`.
   - `_albumNode` for Tidal, Deezer and Spotty (Qobuz is exercised with a stub only).
   - That `newsong` fires on radio title changes with the same url (assumed, and guarded either way).
+  - The `extid` service badge: it needs a Material release containing upstream `d3f1d9227`. That
+    commit is not released as of 2026-09-18 (upstream install.xml says `DEVELOPMENT`).
   - Material rendering of the tiles (`_MTL_icon_` names checked against MaterialIcons.ttf: all
     present), the home shelf, and the search row.
 
@@ -143,8 +171,8 @@ Dropped by the review itself: a list of exactly `LIST_CAP` rows shows the "lates
 **Test-harness trap found in the round:** `time()` in a TEST FILE is the real clock (compiled
 before the override); compare against `TestClock::now()`. It made a new assertion pass vacuously.
 
-**Review round 2026-09-18 (0.1.3, second round) — CLOSED, two findings, both FIXED (unbuilt,
-next build).**
+**Review round 2026-09-18 (0.1.3, second round) — CLOSED, two findings, both FIXED, built
+in 1.0.0.**
 
 | # | finding | disposition |
 |---|---|---|

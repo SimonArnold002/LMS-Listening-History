@@ -49,6 +49,37 @@ sub sourceLabel {
     return $SOURCE_LABEL{$source} || ucfirst($source);
 }
 
+# Source tag or url scheme -> the prefix Material's emblems.json keys its service badge on.
+# Material (upstream d3f1d9227, 2026-09-18) badges a SlimBrowse row from the part of its
+# `extid` before the first ':'; LMS 9.1 XMLBrowser passes a feed item's extid through.
+my %EMBLEM = (
+    qobuz         => 'qobuz',
+    tidal         => 'tidal',
+    wimp          => 'wimp',
+    deezer        => 'deezer',
+    deezerpodcast => 'deezer',
+    spotify       => 'spotify',
+    bandcamp      => 'bandcamp',
+    radioparadise => 'radioparadise',
+    sounds        => 'bbc',        # BBC Sounds plays sounds:// urls
+    youtube       => 'youtube',
+    ytm           => 'ytm',
+    pandora       => 'pandora',
+);
+
+# The row's extid, or undef for a row with no service badge (library, plain radio, the web).
+# The stored source decides first; a station (source 'radio') is badged from its url scheme.
+# An album row with the service's own album id carries the real "<svc>:album:<id>"; any other
+# row carries the bare "<svc>:" — on a SlimBrowse row the prefix is all Material reads.
+sub extid {
+    my ($e) = @_;
+    my $pfx = $EMBLEM{ $e->{source} // '' };
+    $pfx //= $EMBLEM{ lc $1 } if !defined $pfx && ($e->{url} // '') =~ m{^(\w+):};
+    return undef unless $pfx;
+    my $id = ref $e->{ref} eq 'HASH' ? $e->{ref}{svc_album_id} : undef;
+    return ($e->{kind} // '') eq 'album' && defined $id && length $id ? "$pfx:album:$id" : "$pfx:";
+}
+
 sub isServiceSource { return $SCHEME{ $_[0] // '' } ? 1 : 0 }
 
 # 'library' for a local file, the service tag for a known streaming scheme, otherwise the
