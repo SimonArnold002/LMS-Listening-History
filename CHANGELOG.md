@@ -3,6 +3,15 @@
 User-facing release notes, written at each merge to `main`. Per-build engineering notes live in
 `docs/VERSION-HISTORY.md`.
 
+## 1.0.7 — 2026-09-19
+
+Browse your history by release, split into albums, EPs and singles the way LMS does.
+
+### Improvements
+- **By album is now By release.** It opens *Albums*, *EPs*, *Singles* and *Compilations*, each with a count, and each opens its releases. The names and order are the ones LMS and the Material Skin use for your library.
+- **Release types come from the source.** Library releases use the type from your tags, read live, so a retag and rescan moves a release. Qobuz releases use the type Qobuz states, looked up once when you play them. Releases from Tidal, Deezer, Spotify and Bandcamp don't state a type, so they're listed as albums, as Material does.
+- **Singles and EPs group like albums.** Play two or more tracks of a single or an EP back to back and they're one entry for that release.
+
 ## 1.0.5 — 2026-09-19
 
 Search your history by year, and browse it year by year.

@@ -92,6 +92,20 @@ is('countRange rejects a malformed bound', Plugins::ListeningHistory::DB::countR
 ok('days lists that day', grep { $_->{ymd} eq $ymd } @{ Plugins::ListeningHistory::DB::days(substr($ymd, 0, 7)) });
 is('forDay rejects a malformed day', scalar @{ Plugins::ListeningHistory::DB::forDay("x' OR 1=1 --") }, 0);
 
+# --- setReleaseType merges into the ref ------------------------------------------------------------
+{
+    my $rid = add(title => 'RT', url => 'file:///rt', played_at => $t0 + 950, ref => { svc_album_id => 'q1', svc => 'qobuz' });
+    my $D = 'Plugins::ListeningHistory::DB';
+    is('setReleaseType: stored', $D->can('setReleaseType')->($rid, 'EP'), 1);
+    my $e = $D->can('get')->($rid);
+    is('setReleaseType: the type is in the ref', $e->{ref}{release_type}, 'EP');
+    is('setReleaseType: the rest of the ref is kept', $e->{ref}{svc_album_id}, 'q1');
+    is('setReleaseType: a missing entry is not stored', $D->can('setReleaseType')->(999999, 'EP'), 0);
+    is('setReleaseType: a malformed type is refused', $D->can('setReleaseType')->($rid, "x'); DROP"), 0);
+    is('setReleaseType: a lower-case type is refused (callers upper-case it)', $D->can('setReleaseType')->($rid, 'ep'), 0);
+    $D->can('remove')->($rid);
+}
+
 # --- remove and purge take the plays with them ---------------------------------------------------
 is('remove: one entry', Plugins::ListeningHistory::DB::remove($id), 1);
 is('remove: its plays go too', scalar @{ Plugins::ListeningHistory::DB::plays($id) }, 0);

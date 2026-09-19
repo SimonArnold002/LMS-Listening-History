@@ -1,7 +1,7 @@
 package Plugins::ListeningHistory::Browse;
 
 # The app's feeds. The top level is a plain tile list — Recently played, Search, By date,
-# By artist, By album, By player, Settings — and every list below it ends in history rows.
+# By artist, By release, By service, By player, Settings — and every list below it ends in history rows.
 #
 # A history row is directly playable:
 #   album    type => 'playlist' + a coderef that rebuilds the album (Sources::resolveTracks),
@@ -67,7 +67,7 @@ sub topLevel {
         _searchRow($client, $params->{features}),
         _link($client, 'PLUGIN_LH_BY_DATE',   I_DATE,   \&_dates),
         _link($client, 'PLUGIN_LH_BY_ARTIST', I_ARTIST, \&_artists),
-        _link($client, 'PLUGIN_LH_BY_ALBUM',  I_ALBUM,  \&_albums),
+        _link($client, 'PLUGIN_LH_BY_RELEASE', I_ALBUM, \&_releases),
         _link($client, 'PLUGIN_LH_BY_SERVICE', I_SERVICE, \&_services),
         _link($client, 'PLUGIN_LH_BY_PLAYER', I_PLAYER, \&_players),
         {
@@ -393,19 +393,41 @@ sub _artist {
     _entryList($client, $cb, Plugins::ListeningHistory::DB::forArtist($pt->{artist}));
 }
 
-# A By album tile reads like any release in LMS — the album over the artist, no count — and
-# wears the service badge of its most recent play (Simon, 2026-09-19).
-sub _albums {
+# By release: one row per release TYPE with its count — Albums, EPs, Singles … named and
+# ordered as LMS / Material name and order them — each opening its releases (Simon,
+# 2026-09-19). A release's type is that of its most recent play (Sources::releaseType).
+sub _releaseGroups {
+    my %by;
+    for my $g (@{ Plugins::ListeningHistory::DB::albums() }) {
+        $g->{last} = Plugins::ListeningHistory::DB::get($g->{last_id});
+        push @{ $by{ Plugins::ListeningHistory::Sources::releaseType($g->{last}) } }, $g;
+    }
+    return \%by;
+}
+
+sub _releases {
     my ($client, $cb) = @_;
+    my $by = _releaseGroups();
+    my @items = map {
+        my $name = Plugins::ListeningHistory::Sources::releaseTypeLabel($client, $_) . ' (' . scalar(@{ $by->{$_} }) . ')';
+        _link($client, \$name, I_ALBUM, \&_releaseList, { type => $_ })
+    } Plugins::ListeningHistory::Sources::sortReleaseTypes(keys %$by);
+    return _entryList($client, $cb, []) unless @items;
+    $cb->({ items => \@items });
+}
+
+# A release tile reads like any release in LMS — the album over the artist, no count — and
+# wears the service badge of its most recent play (Simon, 2026-09-19).
+sub _releaseList {
+    my ($client, $cb, $args, $pt) = @_;
     my @items = map {
         my $item = _link($client, \$_->{album}, $_->{artwork} || I_ALBUM, \&_album,
             { album => $_->{album}, artist => $_->{artist} });
         %$item = (%$item, _titled($client, $_->{album}, $_->{artist}));
-        my $last  = Plugins::ListeningHistory::DB::get($_->{last_id});
-        my $extid = $last ? Plugins::ListeningHistory::Sources::extid($last) : undef;
+        my $extid = $_->{last} ? Plugins::ListeningHistory::Sources::extid($_->{last}) : undef;
         $item->{extid} = $extid if defined $extid;
         $item
-    } @{ Plugins::ListeningHistory::DB::albums() };
+    } @{ _releaseGroups()->{ $pt->{type} // '' } || [] };
     return _entryList($client, $cb, []) unless @items;
     $cb->({ items => \@items });
 }

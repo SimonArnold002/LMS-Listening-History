@@ -177,6 +177,65 @@ is('qobuz: source', $e->[0]{source}, 'qobuz');
 is('qobuz: replays by the service album id', $e->[0]{ref}{svc_album_id}, 'qa1');
 is('qobuz: artwork from the handler', $e->[0]{artwork}, 'https://img/q.jpg');
 
+# --- Qobuz release type: asked once per album, stored on the entry when it answers ---------------
+{
+    package FakeQobuzAPI;
+    our (@CALLS, %TYPE, $DEFER, @PENDING);
+    sub getAlbum { my ($s, $cb, $id) = @_; push @CALLS, $id;
+                   my $ans = sub { $cb->({ id => $id, release_type => $TYPE{$id} }) };
+                   $DEFER ? push(@PENDING, $ans) : $ans->() }
+    no warnings 'once';
+    *Plugins::Qobuz::Plugin::getAPIHandler = sub { bless {}, 'FakeQobuzAPI' };
+}
+fresh();
+%FakeQobuzAPI::TYPE = (qe1 => 'epmini', qs1 => 'single');   # Qobuz's real spellings
+$Slim::Player::ProtocolHandlers::META{qobuz} = {
+    'qobuz://e1.flac' => { title => 'E1', artist => 'E Band', album => 'E EP', albumId => 'qe1' },
+    'qobuz://e2.flac' => { title => 'E2', artist => 'E Band', album => 'E EP', albumId => 'qe1' },
+    'qobuz://s1.flac' => { title => 'S1', artist => 'S Band', album => 'S1',   albumId => 'qs1' },
+    'qobuz://s2.flac' => { title => 'S2', artist => 'S Band', album => 'S1',   albumId => 'qs1' },
+};
+$FakeQobuzAPI::DEFER = 1;
+play($kitchen, remoteTrack(url => 'qobuz://e1.flac', title => 'E1'));
+is('release type: Qobuz is asked for the album', join(',', @FakeQobuzAPI::CALLS), 'qe1');
+play($kitchen, remoteTrack(url => 'qobuz://e2.flac', title => 'E2'));
+is('release type: nothing stored before Qobuz answers', entries()->[0]{ref}{release_type}, undef);
+$_->() for splice @FakeQobuzAPI::PENDING;
+$e = entries();
+is('release type: an answer after the album promotion lands on the entry', $e->[0]{ref}{release_type}, 'EP');
+is('release type: and the album reference survives it', $e->[0]{ref}{svc_album_id}, 'qe1');
+is('release type: an EP played through is ONE entry', scalar @$e, 1);
+is('release type: asked once, not once per track', scalar @FakeQobuzAPI::CALLS, 1);
+$FakeQobuzAPI::DEFER = 0;
+fresh();
+play($kitchen, remoteTrack(url => 'qobuz://e1.flac', title => 'E1'));
+is('release type: a later play of the same album is not asked again', scalar @FakeQobuzAPI::CALLS, 1);
+is('release type: it is stored straight away from the run\'s answer', entries()->[0]{ref}{release_type}, 'EP');
+play($kitchen, remoteTrack(url => 'qobuz://s1.flac', title => 'S1'));
+play($kitchen, remoteTrack(url => 'qobuz://s2.flac', title => 'S2'));
+$e = entries();
+is('release type: an answer BEFORE the promotion is kept through it', $e->[0]{ref}{release_type}, 'SINGLE');
+is('release type: a two-track single is one entry', $e->[0]{kind}, 'album');
+{
+    my @got;
+    my $F = \&Plugins::ListeningHistory::Sources::fetchReleaseType;
+    @FakeQobuzAPI::CALLS = ();
+    $F->($kitchen, 'qobuz', 'qs1', sub { push @got, $_[0] }) for 1, 2;
+    is('fetchReleaseType: a known album answers from this run, no second call', scalar @FakeQobuzAPI::CALLS, 0);
+    is('fetchReleaseType: both callers get the type', join(',', @got), 'SINGLE,SINGLE');
+    $F->($kitchen, 'qobuz', 'qx9', sub { push @got, $_[0] // 'undef' });
+    is('fetchReleaseType: an album Qobuz gives no type for answers undef', $got[-1], 'undef');
+    $F->($kitchen, 'tidal', 'qs1', sub { push @got, $_[0] // 'undef' });
+    is('fetchReleaseType: any other source answers undef at once', $got[-1], 'undef');
+}
+fresh();
+@FakeQobuzAPI::CALLS = ();
+$Slim::Player::ProtocolHandlers::META{deezer} = {
+    'deezer://d1.mp3' => { title => 'D1', artist => 'D', album => 'D LP', albumId => 'dz1' } };
+play($kitchen, remoteTrack(url => 'deezer://d1.mp3', title => 'D1'));
+is('CONTROL: a Deezer album id asks nobody', scalar @FakeQobuzAPI::CALLS, 0);
+is('CONTROL: and stores no type', entries()->[0]{ref}{release_type}, undef);
+
 # --- streaming with no album id: grouped by album + FIRST credit ---------------------------
 fresh();
 $Slim::Player::ProtocolHandlers::META{deezer} = {

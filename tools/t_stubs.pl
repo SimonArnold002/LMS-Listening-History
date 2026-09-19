@@ -50,9 +50,15 @@ use warnings;
     package Slim::Utils::Strings;
     require Exporter; our @ISA = ('Exporter'); our @EXPORT_OK = ('cstring', 'string');
     my %FMT = (PLUGIN_LH_TRUNCATED => 'latest %s', PLUGIN_LH_SORTED_BY => 'Sorted by %s',
-                PLUGIN_LH_PLAYED_IN => 'Played in %s', PLUGIN_LH_ALL_OF => 'All of %s');
+                PLUGIN_LH_PLAYED_IN => 'Played in %s', PLUGIN_LH_ALL_OF => 'All of %s',
+                # LMS's real values: RELEASE_TYPE_ALBUMS is empty, ALBUMS carries the name.
+                RELEASE_TYPE_ALBUMS => '', ALBUMS => 'Albums', RELEASE_TYPE_EPS => 'EPs',
+                RELEASE_TYPE_SINGLES => 'Singles', RELEASE_TYPE_COMPILATIONS => 'Compilations');
     sub cstring { return $FMT{ $_[1] // '' } // $_[1] // '' }
     sub string  { return $_[0] // '' }
+    # The release-type names LMS has (RELEASE_TYPE_ALBUMS exists but is EMPTY, as on a real server).
+    our %EXISTS = map { $_ => 1 } qw(RELEASE_TYPE_ALBUMS ALBUMS RELEASE_TYPE_EPS RELEASE_TYPE_SINGLES RELEASE_TYPE_COMPILATIONS);
+    sub stringExists { return $EXISTS{ $_[0] // '' } ? 1 : 0 }
     $INC{'Slim/Utils/Strings.pm'} = __FILE__;
 }
 
@@ -158,7 +164,16 @@ BEGIN { *CORE::GLOBAL::time = sub () { CORE::time() + ($TestClock::OFFSET || 0) 
 {
     package Slim::Schema;
     our %ALBUM_TRACKS;   # album id => [ [title, url], … ]
+    our %ALBUM_META;     # album id => { release_type, compilation }
     sub add_test_album { my ($id, @tracks) = @_; $ALBUM_TRACKS{$id} = \@tracks }
+    sub find {
+        my (undef, $kind, $id) = @_;
+        return undef unless $kind eq 'Album' && $ALBUM_META{ $id // '' };
+        return bless { %{ $ALBUM_META{$id} } }, 'Slim::Schema::FakeAlbum';
+    }
+    package Slim::Schema::FakeAlbum;
+    sub release_type { $_[0]->{release_type} } sub compilation { $_[0]->{compilation} }
+    package Slim::Schema;
     sub search {
         my (undef, $kind, $cond) = @_;
         my $id = ref $cond eq 'HASH' ? $cond->{'album.id'} : undef;

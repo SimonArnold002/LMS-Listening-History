@@ -10,13 +10,13 @@ Tested on LMS 9.x with the **Material Skin**.
 
 | Feature | What it gives you | Needs |
 |---|---|---|
-| **Albums stay albums** | Two or more tracks of the same album played back to back become one entry | Nothing |
+| **Albums stay albums** | Two or more tracks of the same release played back to back become one entry, whether it's an album, an EP or a single | Nothing |
 | **Every player** | Every player on the server is recorded; browse by player to see what played where | Nothing |
 | **Library and streaming** | Local files and any streaming service, in one history | The service's own plugin |
 | **Looks like LMS** | An album reads album over artist, a single track reads like an LMS favourite, and streaming entries carry the service's badge on the artwork | Badge: a Material Skin newer than 6.4.9 |
 | **Plays again** | Tap an entry to play it: a whole album, the single track, or the radio station | The service's own plugin |
 | **Material home shelf** | A *Listening History* row of your latest 50 entries on the home screen | Material Skin |
-| **Look further back** | Browse by date, artist, album, service or player, or search by text, a date, a year or a range of either | Nothing |
+| **Look further back** | Browse by date, artist, release, service or player, or search by text, a date, a year or a range of either | Nothing |
 | **Sort any list** | Newest first, artist A–Z or album A–Z | Nothing |
 | **Radio too** | A station is logged once per listening session | Nothing |
 | **Its own database** | Nothing is lost when the server restarts, and you choose how long to keep it | Nothing |
@@ -61,7 +61,7 @@ Open **My Apps → Listening History**:
 | **Search history** | Anything whose artist, album, track title or player name matches, including tracks played inside an album. Type a **date**, a **year** or a range of either to see what was played then (see below) |
 | **By date** | Today, Yesterday, then each year → *All of* the year, or a month → day |
 | **By artist** | Every artist you've played, with a count |
-| **By album** | Every album you've played from, with the service badge of its latest play |
+| **By release** | Your releases split by type, the way LMS does: *Albums*, *EPs*, *Singles*, *Compilations*. Each opens its releases, with the service badge of the latest play. Library releases use the type from your tags; Qobuz states its own. Releases from other services are listed as albums |
 | **By service** | Library, Qobuz, Spotify, Radio and so on, each with its own history |
 | **By player** | Each player, with its history |
 

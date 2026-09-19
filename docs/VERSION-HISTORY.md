@@ -161,3 +161,24 @@ round's two fixes (CLAUDE.md §C):
 - `DB::countRange`. Strings `PLUGIN_LH_PLAYED_IN`, `PLUGIN_LH_ALL_OF`.
 - Tests 242 → 276 (t_browse 110 → 135, t_db 44 → 51, t_load 37 → 39). Six mutations, each red.
 - Zip sha `2d57ecf390544455753069b71c51820c33daf451`. README text for this waits for the merge to `main`.
+
+## 1.0.6 — 2026-09-19 (dev) — By release, broken down like LMS
+
+- **By album is now By release**: one row per release type (Albums / EPs / Singles / Compilations …,
+  LMS's names, Material's order) with its count, each opening its release tiles. See CLAUDE.md
+  `BY RELEASE, BROKEN DOWN LIKE LMS`. Grouping of plays is unchanged: a two-track single or an EP played
+  through is one entry.
+- `Sources::releaseType` (library live from `albums.release_type` + the compilation rule; Qobuz stored;
+  else ALBUM), `releaseTypeLabel` (LMS's `releaseTypeName` first), `sortReleaseTypes`,
+  `fetchReleaseType` (Qobuz `getAlbum`, once per album per run). `DB::setReleaseType`. `Tracker` asks
+  after recording a Qobuz play. String `PLUGIN_LH_BY_ALBUM` → `PLUGIN_LH_BY_RELEASE`.
+- Tests 276 → 317 (t_browse 135 → 149, t_db 51 → 57, t_load 39 → 44, t_tracker 51 → 67). 11 mutations,
+  each red.
+- Zip sha `41b4d1a9e03bce2ca984d88870efb713c0f61e67`. README / CHANGELOG wait for the merge to `main`.
+
+## 1.0.7 — 2026-09-19 (dev) — Qobuz EPs
+
+- Live on 1.0.6, a Qobuz EP showed as its own "Epmini (1)" type: Qobuz's album object says `epmini` for an
+  EP. `Sources::_normType` maps EPMINI → EP on every read (`%TYPE_ALIAS`), which also fixes the entry
+  already stored. Tests 317 → 318; the tracker's fake Qobuz now answers with Qobuz's real spellings.
+- Zip sha `775fcef641e9940638d1f1313b9cd70e4ccebf67`.
