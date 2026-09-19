@@ -414,9 +414,10 @@ sub entryRow {
     my ($client, $e) = @_;
     my $kind = $e->{kind} // 'track';
 
-    # The same two lines as a release anywhere else in LMS: the album (or the track, or the
-    # station) on top and the artist underneath, nothing of our own (Simon, 2026-09-19). The
-    # count, the player and the time are not shown on the row; the sort row still orders by
+    # Named the way LMS names the same thing elsewhere, nothing of our own (Simon, 2026-09-19):
+    # an album row is the album over the artist, like any release; a single track is ONE line,
+    # "Title by Artist from Album", exactly as LMS names a favourite track; a station is its
+    # name. The count, the player and the time are not shown; the sort row still orders by
     # them. The service is Material's badge on the artwork, from extid.
     my ($name, %play);
     if ($kind eq 'album') {
@@ -431,11 +432,12 @@ sub entryRow {
         $name = $e->{title} // cstring($client, 'PLUGIN_LH_UNKNOWN_TITLE');
         %play = (type => 'audio', url => $e->{url});
     }
-    my $artist = $kind eq 'station' ? undef : $e->{artist};
-    my $extid  = Plugins::ListeningHistory::Sources::extid($e);
+    my $extid = Plugins::ListeningHistory::Sources::extid($e);
 
     return {
-        _titled($client, $name, $artist),
+        ($kind eq 'album'   ? _titled($client, $name, $e->{artist})
+       : $kind eq 'station' ? (name => $name)
+       :                      (name => _trackName($client, $name, $e->{artist}, $e->{album}))),
         image       => $e->{artwork} || ICON,
         (defined $extid ? (extid => $extid) : ()),
         %play,
@@ -448,8 +450,6 @@ sub entryRow {
     };
 }
 
-# Drill-in and play of an album row: the whole album where the library or the service can
-# rebuild it, otherwise the tracks that were played.
 # The title fields of a release-shaped row. Material (and any CLI client) gets `line1` over
 # `line2` — Slim::Control::XMLBrowser sends (line1 || name) . "\n" . line2 when line2 is set —
 # so it shows the album over the artist. The Default / Classic web skins draw only `name`, so
@@ -462,6 +462,20 @@ sub _titled {
             line1 => $what, line2 => $artist);
 }
 
+# A single track, named the way LMS names one: "Live By You by Actress from Radical Frame"
+# (a Qobuz track saved to Favourites reads exactly that). Core strings BY and FROM, so it is
+# translated as LMS's own is. One line, no line1/line2, so Material and the web skins show the
+# same text. A missing artist or album just drops its clause.
+sub _trackName {
+    my ($client, $title, $artist, $album) = @_;
+    my $n = $title;
+    $n .= ' ' . cstring($client, 'BY') . ' ' . $artist   if defined $artist && length $artist;
+    $n .= ' ' . cstring($client, 'FROM') . ' ' . $album  if defined $album  && length $album;
+    return $n;
+}
+
+# Drill-in and play of an album row: the whole album where the library or the service can
+# rebuild it, otherwise the tracks that were played.
 sub _entryTracks {
     my ($client, $cb, $args, $pt) = @_;
     my $e = Plugins::ListeningHistory::DB::get($pt->{id});

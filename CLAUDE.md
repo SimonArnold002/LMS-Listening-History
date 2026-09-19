@@ -36,6 +36,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | service badge `Sources::extid` / row `extid`; NO service name in `entryRow` line2 | **DECIDED by Simon 2026-09-18** (1.0.1) | `THE SERVICE IS A BADGE` |
 | `entryRow` text: Album (or Title) over Artist, no count / player / time on the row; `_when`, `PLUGIN_LH_TRACKS_OF`, `PLUGIN_LH_FROM` removed | **DECIDED by Simon 2026-09-19** | `A ROW READS LIKE A RELEASE` |
 | `_titled`: web-skin `name` = "Album by Artist", Material gets `line1` over `line2` | **DECIDED by Simon 2026-09-19** (1.0.2 review) | `THE WEB SKINS KEEP THE ARTIST IN THE NAME` |
+| `_trackName`: a single-track row is ONE line "Title by Artist from Album", as LMS names a favourite track | **DECIDED by Simon 2026-09-19** | `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE` |
 | back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
 | app/shelf logo `ListeningHistoryIcon` = Google `music_history`, not Material's `history` glyph | **KEPT by Simon 2026-09-18** | `THE LOGO STAYS` |
 | "More by this artist" context entry | DROPPED at build; By artist covers it | `MORE BY THIS ARTIST` |
@@ -136,6 +137,15 @@ can be DISPROVEN. Closing a round is not a suppression.
     player and the date/time (`_join`, `_when`, `SEP`, `GLYPH_*`, and six unused strings removed). The
     data is still stored and the sort row still orders by date, artist or album.
   - A station has no second line; a row with no artist likewise.
+  - **A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE (`_trackName`) — Simon, 2026-09-19.** *"if a user plays just
+    a single track from an album we should be showing it like LMS does for one track"*, pointing at his
+    Favourites: a Qobuz track saved there reads `Live By You by Actress from Radical Frame` (checked over
+    `favorites items`: one `text` line, no second line, and Material does not split it). So a `track` row is
+    `name` = "Title by Artist from Album" (core strings `BY` / `FROM`, translated), with NO `line1`/`line2`,
+    identical on Material and the web skins. A missing artist or album drops its clause. Album rows stay
+    album over artist (`_titled`); stations stay their name.
+    Guard: `t_browse.pl` (the full form, no line1/line2, each clause dropped alone, album-row control);
+    anti-tested (no FROM clause: 4 red; track put back on `_titled`: 5 red).
   - **THE WEB SKINS KEEP THE ARTIST IN THE NAME (`_titled`) — Simon, 2026-09-19, from the 1.0.2 review.**
     Default / Classic draw `name` only (never line2), so a bare title there lost the artist. A release row
     now carries `name` = "Album by Artist" (core string `BY`, as LMS's own web lists word it) plus `line1`
@@ -167,7 +177,7 @@ can be DISPROVEN. Closing a round is not a suppression.
 ### B. KNOWN-OPEN AND ACCEPTED
 
 - **UNVERIFIED LIVE (2026-09-18).** Installed on plex:9000 since 0.1.0 and Simon
-  reports it working in general use; the service badge is verified live (§A2). 1.0.3 (web-skin artist fix)
+  reports it working in general use; the service badge is verified live (§A2). 1.0.4 (single-track naming)
   built 2026-09-19, not yet installed. These specific paths have not been checked individually and are covered by
   the suites only:
   - `Sources::isStation` — any remote non-service url with no duration is a station. Not checked

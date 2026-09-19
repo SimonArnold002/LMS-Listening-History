@@ -139,3 +139,14 @@ round's two fixes (CLAUDE.md §C):
 - Tests 235 → 240 (t_browse 103 → 108). Anti-tested: web name without the artist 3 red; `line1`
   dropped 17 red.
 - BUILT as 1.0.3, zip sha `66d5db43259538a9b70b63a7b20999d9388a7144`. `repo.xml` still untouched.
+
+## 1.0.4 — 2026-09-19 (dev) — a single track is named like LMS names one
+
+- `Browse::_trackName`: a `track` row is ONE line, "Title by Artist from Album" (core strings `BY` /
+  `FROM`), exactly as LMS names a favourite track (Simon's Qobuz favourite: `Live By You by Actress
+  from Radical Frame`). No line1/line2, so Material and the web skins show the same text. A missing
+  artist or album drops its clause. Album rows and stations unchanged. See CLAUDE.md
+  `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE`.
+- A misplaced comment moved back above `_entryTracks`.
+- Tests 240 → 242 (t_browse 108 → 110). Anti-tested: no FROM clause 4 red; track rows on `_titled` 5 red.
+- Zip sha `202b50fc7ae556c6a96b4967c0cee6435e3333eb`. `repo.xml` still untouched.

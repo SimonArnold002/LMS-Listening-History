@@ -32,7 +32,7 @@ add(title => "Song $_", artist => 'A', url => "file:///$_", played_at => $now) f
 my $shelf = feed(\&Plugins::ListeningHistory::Browse::homeShelf, {});
 is('shelf: exactly 50 of 60', scalar @$shelf, 50);
 is('shelf: flat — no header or text rows', scalar(grep { ($_->{type} // '') =~ /header|text/ } @$shelf), 0);
-is('shelf: newest first even when played_at ties', shown($shelf->[0]), "Song 60");
+is('shelf: newest first even when played_at ties', shown($shelf->[0]), "Song 60 BY A");
 my $again = feed(\&Plugins::ListeningHistory::Browse::homeShelf, {});
 is('shelf: the same order on every request', join('|', map { shown($_) } @$again), join('|', map { shown($_) } @$shelf));
 my @ex = @Plugins::MaterialSkin::HomeExtraBase::INIT;
@@ -60,12 +60,15 @@ is('album row: the artist underneath, and only the artist', $albumRow->{line2}, 
 # The Default / Classic web skins draw `name` alone, so it keeps the artist, worded as LMS's own
 # web lists word it (core string BY; the stub returns the token).
 is('album row: the web-skin name keeps the artist', $albumRow->{name}, 'Local LP BY Lib');
-is('track row: the web-skin name keeps the artist', $row{'Solo'}{name}, 'Solo BY Lib');
 is('station row: the name alone, no "by"', $row{'Jazz FM'}{name}, 'Jazz FM');
 is('album row: has the "…" menu', $albumRow->{itemActions}{info}{command}[1], 'contextmenu');
-is('track row: type audio', $row{'Solo'}{type}, 'audio');
-is('track row: plays its url', $row{'Solo'}{url}, 'file:///a/3');
-is('track row: the artist underneath, and only the artist', $row{'Solo'}{line2}, 'Lib');
+# A single track is named the way LMS names one (a favourite track reads "Live By You by Actress
+# from Radical Frame"): ONE line, core strings BY and FROM, the same on Material and the web skins.
+my $solo = $row{'Solo BY Lib FROM Local LP'};
+is('track row: "Title by Artist from Album", one line', $solo->{name}, 'Solo BY Lib FROM Local LP');
+ok('track row: no line1/line2 (no second line anywhere)', !exists $solo->{line1} && !exists $solo->{line2});
+is('track row: type audio', $solo->{type}, 'audio');
+is('track row: plays its url', $solo->{url}, 'file:///a/3');
 is('station row: type audio', $row{'Jazz FM'}{type}, 'audio');
 is('station row: plays the station', $row{'Jazz FM'}{url}, 'http://jazz/stream');
 ok('station row: no second line (a station has no artist)', !exists $row{'Jazz FM'}{line2});
@@ -73,7 +76,7 @@ ok('station row: no second line (a station has no artist)', !exists $row{'Jazz F
 # --- service badge (extid) and no service name in line2 ---------------------------------------------
 {
     my $R = sub { Plugins::ListeningHistory::Browse::entryRow(undef, { kind => 'track', played_at => 1, %{ $_[0] } }) };
-    ok('library row: no extid (no badge)', !exists $albumRow->{extid} && !exists $row{'Solo'}{extid});
+    ok('library row: no extid (no badge)', !exists $albumRow->{extid} && !exists $solo->{extid});
     is('plain radio: no extid', $row{'Jazz FM'}{extid}, undef);
     is('qobuz track: badge prefix', $R->({ source => 'qobuz', url => 'qobuz://1.flac' })->{extid}, 'qobuz:');
     is('tidal track', $R->({ source => 'tidal', url => 'tidal://2.flc' })->{extid}, 'tidal:');
@@ -88,11 +91,15 @@ ok('station row: no second line (a station has no artist)', !exists $row{'Jazz F
     my ($qrow) = grep { (shown($_) // '') eq 'Q LP' } @{ feed(\&Plugins::ListeningHistory::Browse::_recent, {}) };
     is('album row with the service album id: the real extid, through the DB', $qrow->{extid}, 'qobuz:album:abc123');
     is('album row with no id: bare prefix', $R->({ kind => 'album', source => 'deezer', url => 'deezer://1.mp3' })->{extid}, 'deezer:');
-    my $qt = $R->({ source => 'qobuz', url => 'qobuz://1.flac', artist => 'Q Artist', player_name => 'Kitchen' });
-    is('line2 is the artist alone: no service, no player, no time', $qt->{line2}, 'Q Artist');
+    my $qt = $R->({ source => 'qobuz', url => 'qobuz://1.flac', title => 'T', artist => 'Q Artist', player_name => 'Kitchen' });
+    is('track name: no service, no player, no time', $qt->{name}, 'T BY Q Artist');
+    is('track with no album: the "from" clause is dropped', $qt->{name}, 'T BY Q Artist');
+    is('track with no artist: the "by" clause is dropped',
+       $R->({ source => 'qobuz', url => 'qobuz://3.flac', title => 'T', album => 'LP' })->{name}, 'T FROM LP');
     my $bare = $R->({ source => 'qobuz', url => 'qobuz://2.flac', title => 'Bare' });
-    ok('no artist, no second line and no line1', !exists $bare->{line2} && !exists $bare->{line1});
-    is('no artist: the web-skin name is the title alone', $bare->{name}, 'Bare');
+    ok('no artist or album: the title alone, no second line', $bare->{name} eq 'Bare' && !exists $bare->{line2} && !exists $bare->{line1});
+    my $alb = $R->({ kind => 'album', source => 'qobuz', url => 'qobuz://4.flac', album => 'LP', artist => 'Q Artist' });
+    ok('CONTROL: an album row is still album over artist', $alb->{line1} eq 'LP' && $alb->{line2} eq 'Q Artist');
     Plugins::ListeningHistory::DB::remove($qa);
 }
 
