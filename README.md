@@ -16,7 +16,7 @@ Tested on LMS 9.x with the **Material Skin**.
 | **Looks like LMS** | An album reads album over artist, a single track reads like an LMS favourite, and streaming entries carry the service's badge on the artwork | Badge: a Material Skin newer than 6.4.9 |
 | **Plays again** | Tap an entry to play it: a whole album, the single track, or the radio station | The service's own plugin |
 | **Material home shelf** | A *Listening History* row of your latest 50 entries on the home screen | Material Skin |
-| **Look further back** | Browse by date, artist, album, service or player, or search by text, a date or a date range | Nothing |
+| **Look further back** | Browse by date, artist, album, service or player, or search by text, a date, a year or a range of either | Nothing |
 | **Sort any list** | Newest first, artist A–Z or album A–Z | Nothing |
 | **Radio too** | A station is logged once per listening session | Nothing |
 | **Its own database** | Nothing is lost when the server restarts, and you choose how long to keep it | Nothing |
@@ -58,8 +58,8 @@ Open **My Apps → Listening History**:
 | Menu | What it shows |
 |---|---|
 | **Recently played** | Your latest 50 entries, the same as the home shelf |
-| **Search history** | Anything whose artist, album, track title or player name matches, including tracks played inside an album. Type a **date** or a **date range** to see what was played then (see below) |
-| **By date** | Today, Yesterday, then month → day |
+| **Search history** | Anything whose artist, album, track title or player name matches, including tracks played inside an album. Type a **date**, a **year** or a range of either to see what was played then (see below) |
+| **By date** | Today, Yesterday, then each year → *All of* the year, or a month → day |
 | **By artist** | Every artist you've played, with a count |
 | **By album** | Every album you've played from, with the service badge of its latest play |
 | **By service** | Library, Qobuz, Spotify, Radio and so on, each with its own history |
@@ -71,17 +71,19 @@ Rows read the way LMS shows any release:
 - **Track**: one line, the way LMS names a favourite track, e.g. *Live By You by Actress from Radical Frame*.
 - **Radio**: the station's name.
 
-On the Material Skin, an entry from a streaming service carries that service's badge on its artwork; library entries have none, as in Material's own library lists. The badge needs a Material Skin newer than 6.4.9. Which player an entry played on and when aren't shown on the row: use **By player**, **By date** or a date search.
+On the Material Skin, an entry from a streaming service carries that service's badge on its artwork; library entries have none, as in Material's own library lists. The badge needs a Material Skin newer than 6.4.9. Which player an entry played on and when aren't shown on the row: use **By player**, **By date** or a date or year search.
 
 Every list starts with a **Sorted by** row: tap it to switch between *date* (newest first), *artist A–Z* and *album A–Z*. The choice is remembered. The home shelf always shows the newest first.
 
-### Searching by date
+### Searching by date or year
 
 Dates are **day first**. Any of these find everything played on 18 September 2026:
 
 `18/09/2026` · `18-09-2026` · `18.09.2026` · `18/9/26` · `2026-09-18` · `18 Sep 2026` · `18 September 2026`
 
 For a **range**, put two dates either side of ` - ` or ` to `. For example, `01/09/2026 - 15/09/2026` lists everything from the 1st to the 15th, both days included. A date that doesn't exist, like `31/02/2026`, is searched as ordinary text.
+
+Type a **year**, like `2025`, or a range of years, like `2024 - 2025`, and the first result is **Played in 2025**, which opens everything played that year. Below it are the ordinary text matches, so an album or artist with a year in its name, like *1989* or *The 1975*, still turns up.
 
 ### Playing an entry
 

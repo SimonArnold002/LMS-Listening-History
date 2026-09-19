@@ -65,7 +65,7 @@ sub topLevel {
     $cb->({ items => [
         _link($client, 'PLUGIN_LH_RECENT',    I_RECENT, \&_recent),
         _searchRow($client, $params->{features}),
-        _link($client, 'PLUGIN_LH_BY_DATE',   I_DATE,   \&_months),
+        _link($client, 'PLUGIN_LH_BY_DATE',   I_DATE,   \&_dates),
         _link($client, 'PLUGIN_LH_BY_ARTIST', I_ARTIST, \&_artists),
         _link($client, 'PLUGIN_LH_BY_ALBUM',  I_ALBUM,  \&_albums),
         _link($client, 'PLUGIN_LH_BY_SERVICE', I_SERVICE, \&_services),
@@ -110,15 +110,49 @@ sub _legacySearch {
     _searchResults($client, $cb, $args->{search});
 }
 
-# A search that is a date, or a range of two dates, lists what was played on those days;
-# anything else is a text search.
+# A search that is a date, or a range of two dates, lists what was played on those days.
+# A year, or a range of two years, is ALSO a text search — "1989" and "The 1975" are names —
+# so it answers with a "Played in 2025 (n)" row that opens that year, above the text matches
+# (Simon, 2026-09-19). Anything else is a text search.
 sub _searchResults {
     my ($client, $cb, $term) = @_;
     my ($from, $to) = parseDateSearch($term);
-    my $rows = defined $from
-        ? Plugins::ListeningHistory::DB::forRange($from, $to)
-        : Plugins::ListeningHistory::DB::search($term);
-    _entryList($client, $cb, $rows, 'PLUGIN_LH_NO_RESULTS');
+    return _entryList($client, $cb, Plugins::ListeningHistory::DB::forRange($from, $to), 'PLUGIN_LH_NO_RESULTS')
+        if defined $from;
+    my $rows = Plugins::ListeningHistory::DB::search($term);
+    my ($yf, $yt, $label) = parseYearSearch($term);
+    my $n = defined $yf ? Plugins::ListeningHistory::DB::countRange($yf, $yt) : 0;
+    return _entryList($client, $cb, $rows, 'PLUGIN_LH_NO_RESULTS') unless $n;
+    my @items = (_rangeLink($client, 'PLUGIN_LH_PLAYED_IN', $label, $n, $yf, $yt));
+    _entryList($client, sub { push @items, @{ $_[0]{items} } }, $rows) if @$rows;
+    $cb->({ items => \@items });
+}
+
+# "<label> (n)" opening everything played in [$from, $to).
+sub _rangeLink {
+    my ($client, $str, $label, $n, $from, $to) = @_;
+    my $name = sprintf(cstring($client, $str), $label) . " ($n)";
+    return _link($client, \$name, I_DATE, \&_range, { from => $from, to => $to });
+}
+
+sub _range {
+    my ($client, $cb, $args, $pt) = @_;
+    _entryList($client, $cb, Plugins::ListeningHistory::DB::forRange($pt->{from}, $pt->{to}));
+}
+
+# A year search: "2025", or two years joined like a date range ("2024 - 2025", either order).
+# Returns ($from, $to, $label) — local midnight on 1 January of the first year, on 1 January
+# after the last, and "2025" or "2024–2025" — or an empty list.
+sub parseYearSearch {
+    my ($term) = @_;
+    return () unless defined $term;
+    $term =~ s/^\s+|\s+$//g;
+    my @y = split /\s+(?:-|\x{2013}|\x{2014}|to)\s+/i, $term;
+    return () unless @y && @y <= 2 && !grep { !/^(?:19[7-9]\d|2\d{3})$/ } @y;
+    @y = sort { $a <=> $b } @y;
+    my $label = $y[0] == $y[-1] ? "$y[0]" : "$y[0]\x{2013}$y[-1]";
+    return (POSIX::mktime(0, 0, 0, 1, 0, $y[0] - 1900),
+            POSIX::mktime(0, 0, 0, 1, 0, $y[-1] + 1 - 1900), $label);
 }
 
 # ---------------------------------------------------------------------------
@@ -285,9 +319,9 @@ sub _webBounce {
 }
 
 # ---------------------------------------------------------------------------
-# By date: Today, Yesterday, then month → day → entries
+# By date: Today, Yesterday, then year → (All of the year, month → day) → entries
 # ---------------------------------------------------------------------------
-sub _months {
+sub _dates {
     my ($client, $cb) = @_;
     my @items = (
         _link($client, 'PLUGIN_LH_TODAY',     I_DATE, \&_day, { ymd => _ymd(time()) }),
@@ -295,7 +329,21 @@ sub _months {
         # 24h just after such a midnight lands two days back (or on today).
         _link($client, 'PLUGIN_LH_YESTERDAY', I_DATE, \&_day, { ymd => _ymd(_middayToday() - 86400) }),
     );
-    for my $m (@{ Plugins::ListeningHistory::DB::months() }) {
+    for my $y (@{ Plugins::ListeningHistory::DB::years() }) {
+        push @items, _link($client, \"$y->{y} ($y->{n})", I_DATE, \&_months, { y => $y->{y} });
+    }
+    $cb->({ items => \@items });
+}
+
+sub _months {
+    my ($client, $cb, $args, $pt) = @_;
+    my ($from, $to, $year) = parseYearSearch($pt->{y});
+    my $months = Plugins::ListeningHistory::DB::months($pt->{y});
+    return _entryList($client, $cb, []) unless defined $from && @$months;
+    my $n = 0;
+    $n += $_->{n} for @$months;
+    my @items = (_rangeLink($client, 'PLUGIN_LH_ALL_OF', $year, $n, $from, $to));
+    for my $m (@$months) {
         my ($y, $mo) = split /-/, $m->{ym};
         my $label = POSIX::strftime('%B %Y', 0, 0, 12, 1, $mo - 1, $y - 1900) . " ($m->{n})";
         push @items, _link($client, \$label, I_DATE, \&_days, { ym => $m->{ym} });

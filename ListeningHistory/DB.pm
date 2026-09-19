@@ -306,6 +306,16 @@ sub forRange {
     return _entries('played_at >= ? AND played_at < ?', [$from, $to]);
 }
 
+# How many entries forRange would list, uncapped.
+sub countRange {
+    my ($from, $to) = @_;
+    return 0 unless defined $from && defined $to && $from =~ /^\d+$/ && $to =~ /^\d+$/;
+    my $h = dbh() or return 0;
+    my ($n) = eval { $h->selectrow_array(
+        'SELECT COUNT(*) FROM entries WHERE played_at >= ? AND played_at < ?', undef, $from, $to) };
+    return $n // 0;
+}
+
 sub forAlbum {
     my ($artist, $album) = @_;
     return _entries('album = ? COLLATE NOCASE AND COALESCE(artist, \'\') = ? COLLATE NOCASE',
@@ -354,10 +364,24 @@ sub _index {
     return $rows || [];
 }
 
+sub years {
+    return _index(q{SELECT strftime('%Y', played_at, 'unixepoch', 'localtime') AS y,
+                           COUNT(*) AS n
+                    FROM entries GROUP BY y ORDER BY y DESC});
+}
+
+# Every month with entries, or only those of one year ('YYYY').
 sub months {
+    my ($year) = @_;
+    return [] if defined $year && $year !~ /^\d{4}$/;
     return _index(q{SELECT strftime('%Y-%m', played_at, 'unixepoch', 'localtime') AS ym,
                            COUNT(*) AS n
-                    FROM entries GROUP BY ym ORDER BY ym DESC});
+                    FROM entries GROUP BY ym ORDER BY ym DESC}) unless defined $year;
+    return _index(q{SELECT strftime('%Y-%m', played_at, 'unixepoch', 'localtime') AS ym,
+                           COUNT(*) AS n
+                    FROM entries
+                    WHERE strftime('%Y', played_at, 'unixepoch', 'localtime') = ?
+                    GROUP BY ym ORDER BY ym DESC}, $year);
 }
 
 sub days {

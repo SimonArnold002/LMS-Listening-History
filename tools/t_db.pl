@@ -82,6 +82,13 @@ my @lt = localtime($t0 + 900);
 my $ymd = sprintf '%04d-%02d-%02d', $lt[5] + 1900, $lt[4] + 1, $lt[3];
 ok('forDay finds the entry on its local day', grep { ($_->{title} // q()) eq q(Later) } @{ Plugins::ListeningHistory::DB::forDay($ymd) });
 ok('months lists that month', grep { $_->{ym} eq substr($ymd, 0, 7) } @{ Plugins::ListeningHistory::DB::months() });
+ok('years lists that year', grep { $_->{y} eq substr($ymd, 0, 4) } @{ Plugins::ListeningHistory::DB::years() });
+ok('months(year) lists that month', grep { $_->{ym} eq substr($ymd, 0, 7) } @{ Plugins::ListeningHistory::DB::months(substr($ymd, 0, 4)) });
+is('months(year) is only that year', scalar @{ Plugins::ListeningHistory::DB::months('1999') }, 0);
+is('months rejects a malformed year', scalar @{ Plugins::ListeningHistory::DB::months("x' OR 1=1 --") }, 0);
+is('countRange counts the half-open range', Plugins::ListeningHistory::DB::countRange($t0 + 900, $t0 + 901), 1);
+is('countRange: the end is exclusive', Plugins::ListeningHistory::DB::countRange($t0 + 901, $t0 + 2000), 0);
+is('countRange rejects a malformed bound', Plugins::ListeningHistory::DB::countRange('x', 1), 0);
 ok('days lists that day', grep { $_->{ymd} eq $ymd } @{ Plugins::ListeningHistory::DB::days(substr($ymd, 0, 7)) });
 is('forDay rejects a malformed day', scalar @{ Plugins::ListeningHistory::DB::forDay("x' OR 1=1 --") }, 0);
 

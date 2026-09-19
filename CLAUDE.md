@@ -36,6 +36,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | `played_threshold` 90%, 60s fallback | **DECIDED by Simon 2026-09-18**: Listen Later's rule | `THE 90% RULE` |
 | radio recorded as a station row | **DECIDED by Simon 2026-09-18** | `RADIO IS A STATION ROW` |
 | By service menu, sort row `_sortRow`/`sortEntries`, date search `parseDateSearch` | **DECIDED by Simon 2026-09-18** (0.1.3) | `DATES, SERVICE MENU, SORT` |
+| year search `parseYearSearch` = a "Played in" row ABOVE the text matches; By date years `_dates`/`_months` + "All of" | **DECIDED by Simon 2026-09-19** | `A YEAR IS ALSO A NAME` |
 | home shelf title `PLUGIN_LH`, not "Recently played" | **DECIDED by Simon 2026-09-18**: avoids confusion with Material's own Recently Played | `SHELF TITLE` |
 | `Sources::albumKey` name fallback, `primaryArtist` | deliberate: first credit only | `THE NAME KEY USES THE FIRST CREDIT` |
 | Bandcamp album replay = recorded tracks | deliberate, no album page url at play time | `BANDCAMP REPLAYS WHAT WAS HEARD` |
@@ -98,6 +99,24 @@ can be DISPROVEN. Closing a round is not a suppression.
   - Service is not a sort mode: the By service menu covers it.
   - Date search (`parseDateSearch`) is a single date OR a range, **day-first** (UK). There is no
     month-first guessing: `09/18/2026` is text, not a date.
+- **A YEAR IS ALSO A NAME (`parseYearSearch`, `_searchResults`) — Simon, 2026-09-19.** *"search by year as
+  well as exact date … and can we have year option when browsing"*. A search that is a year (`2025`) or two
+  years joined like a date range (`2024 - 2025`, either order) answers with a **"Played in 2025 (n)"** row
+  (`_rangeLink` → `_range` → `DB::forRange`, count from `DB::countRange`) FIRST, then the ordinary text
+  matches under their sort row. Simon chose this over "a year is only a year": *1989* and *The 1975* are
+  names, and a bare number must still find them. No year row when that year has no entries; nothing at
+  all → `PLUGIN_LH_NO_RESULTS`. A year is 1970–2999 (any other 4 digits is text only).
+  - Opening the row from Material: search results carry `item_id` `_<term>.N`, which XMLBrowser resolves
+    by re-running the search through `_legacySearch` and taking row N. Checked live 2026-09-19 on a date
+    search (row `_18%2F09%2F2026.1` opened that album's 12 tracks). The row order is deterministic, so
+    position 0 is the year row every time.
+  - **By date**: Today, Yesterday, then one row per year (`DB::years`, newest first). A year
+    (`_months`, `DB::months($year)`) opens **"All of 2025 (n)"** then its months; a month opens its days
+    as before. Simon chose the "All of" row over year → months only.
+  Guard: `t_browse.pl` (every accepted/rejected form, the row + text matches, the whole year inclusive of
+  1 Jan 00:00 and 31 Dec 23:59:59, a range, no-entries, a numeric name, the By date years/All of/months)
+  and `t_db.pl` (`years`, `months($year)`, `countRange`). Anti-tested: year row dropped 3 red, text matches
+  dropped 2, range end +1 year 8, no year level 1, no All-of row 3, the 1970 floor dropped 1.
   - A range is split on ` - `, ` to ` or a spaced en/em dash, in either order, with both days
     inclusive. The bounds are local midnights from `POSIX::mktime`, so a clock-change day is
     exact.
@@ -187,7 +206,8 @@ can be DISPROVEN. Closing a round is not a suppression.
 
 - **UNVERIFIED LIVE (2026-09-18).** Installed on plex:9000 since 0.1.0 and Simon
   reports it working in general use; the service badge is verified live (§A2). 1.0.4 (single-track naming)
-  built 2026-09-19 and RELEASED to `main` (`v1.0.4`), not yet installed on the rig. These specific paths have not been checked individually and are covered by
+  built 2026-09-19 and RELEASED to `main` (`v1.0.4`). 1.0.5 (year search + By date years) built on dev
+  2026-09-19. Neither installed on the rig yet. These specific paths have not been checked individually and are covered by
   the suites only:
   - `Sources::isStation` — any remote non-service url with no duration is a station. Not checked
     against TuneIn, Radio Paradise, BBC Sounds.
@@ -290,7 +310,7 @@ V=1 perl tools/t_tracker.pl
 |---|---|
 | `t_tracker.pl` | the grouping rules end to end through the real callback + timers: one track, album promotion, A/B/A, stop, same url, gap, two players, skip, pause, Qobuz id grouping, first-credit grouping, Spotty error text, radio once per session (+ the deadline), a web track with no length at start is not timed as radio (skip at 61s of 300 not recorded), removed-mid-album |
 | `t_db.pl` | schema stamp + re-open, promote in one transaction, no orphan play on a missing entry, literal `%`/`_` search, indexes, forDay injection, remove/purge cascade, a failed COMMIT reported as failure by addToEntry/remove/purge |
-| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is one line "Title by Artist from Album" (each clause dropped alone; no second line), a station has no second line, By album tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), context menu + remove, unticked checkbox stores 0 |
+| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is one line "Title by Artist from Album" (each clause dropped alone; no second line), a station has no second line, By album tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), year search (the Played in row above the text matches, ranges, a numeric name) and By date years (All of + months), context menu + remove, unticked checkbox stores 0 |
 | `t_load.pl` | every module loads; every `Plugins::ListeningHistory::X::y` call is defined |
 
 Version history: `docs/VERSION-HISTORY.md`.

@@ -150,3 +150,14 @@ round's two fixes (CLAUDE.md §C):
 - A misplaced comment moved back above `_entryTracks`.
 - Tests 240 → 242 (t_browse 108 → 110). Anti-tested: no FROM clause 4 red; track rows on `_titled` 5 red.
 - Zip sha `202b50fc7ae556c6a96b4967c0cee6435e3333eb`. `repo.xml` still untouched.
+
+## 1.0.5 — 2026-09-19 (dev) — search and browse by year
+
+- `Browse::parseYearSearch`: `2025` or `2024 - 2025`. `_searchResults` puts a "Played in 2025 (n)" row
+  (`_rangeLink` → `_range`) above the text matches, so a name like *1989* is still found. See CLAUDE.md
+  `A YEAR IS ALSO A NAME`.
+- By date: Today, Yesterday, then years (`_dates`, `DB::years`); a year opens "All of 2025 (n)" then its
+  months (`_months`, `DB::months($year)`).
+- `DB::countRange`. Strings `PLUGIN_LH_PLAYED_IN`, `PLUGIN_LH_ALL_OF`.
+- Tests 242 → 276 (t_browse 110 → 135, t_db 44 → 51, t_load 37 → 39). Six mutations, each red.
+- Zip sha `2d57ecf390544455753069b71c51820c33daf451`. README text for this waits for the merge to `main`.
