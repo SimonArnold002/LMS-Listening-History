@@ -103,21 +103,64 @@ ok('station row: no second line (a station has no artist)', !exists $row{'Jazz F
     Plugins::ListeningHistory::DB::remove($qa);
 }
 
-# --- By album: a tile reads like a release and wears the badge of its latest play ---------------------
+# --- By release: type rows, each opening its releases (a tile reads like a release, wears the latest badge) ---
 {
     my $old = add(kind => 'album', source => 'deezer', artist => 'M', album => 'Mix LP', url => 'deezer://1.mp3',
                   played_at => time() - 100);
     my $new = add(kind => 'album', source => 'qobuz', artist => 'M', album => 'Mix LP', url => 'qobuz://2.flac',
                   ref => { svc_album_id => 'mx9' }, played_at => time());
-    my %t = map { shown($_) => $_ } @{ feed(\&Plugins::ListeningHistory::Browse::_albums, {}) };
-    ok('by album: named by the album alone, no artist, no count', exists $t{'Mix LP'} && exists $t{'Local LP'});
-    is('by album: the artist underneath', $t{'Mix LP'}{line2}, 'M');
-    is('by album: the web-skin name keeps the artist', $t{'Mix LP'}{name}, 'Mix LP BY M');
-    is('by album: the badge of the LATEST play, not the older one', $t{'Mix LP'}{extid}, 'qobuz:album:mx9');
-    ok('CONTROL: a library album has no badge', !exists $t{'Local LP'}{extid});
-    ok('by album: a station is not an album tile', !exists $t{'Jazz FM'});
-    ok('by album: still drills into that album\'s plays', ref $t{'Mix LP'}{url} eq 'CODE');
-    Plugins::ListeningHistory::DB::remove($_) for $old, $new;
+    my $ep  = add(kind => 'album', source => 'qobuz', artist => 'E', album => 'An EP', url => 'qobuz://3.flac',
+                  ref => { svc_album_id => 'ep1', release_type => 'EP' });
+    my $sg  = add(source => 'qobuz', artist => 'S', album => 'A Single', title => 'A Single', url => 'qobuz://4.flac',
+                  ref => { svc_album_id => 'sg1', release_type => 'SINGLE' });
+    $Slim::Schema::ALBUM_META{77} = { release_type => 'EP' };
+    $Slim::Schema::ALBUM_META{78} = { release_type => 'ALBUM', compilation => 1 };
+    my $lep = add(kind => 'album', source => 'library', artist => 'L', album => 'Lib EP', url => 'file:///lep',
+                  ref => { album_id => 77 });
+    my $cmp = add(kind => 'album', source => 'library', artist => 'V', album => 'Various', url => 'file:///cmp',
+                  ref => { album_id => 78 });
+    my $top = feed(\&Plugins::ListeningHistory::Browse::_releases, {});
+    is('by release: one row per type, LMS order and names, with counts',
+       join('|', map { $_->{name} } @$top), 'Albums (2)|EPs (2)|Compilations (1)|Singles (1)');
+    my %by = map { ($_->{name} =~ /^(\w+)/)[0] => $_ } @$top;
+    my $open = sub { my %t = map { shown($_) => $_ } @{ feed($by{$_[0]}{url}, {}, $by{$_[0]}{passthrough}[0]) }; \%t };
+    my $t = $open->('Albums');
+    ok('by release: Albums holds the untyped releases', exists $t->{'Mix LP'} && exists $t->{'Local LP'});
+    ok('by release: and no EP', !exists $t->{'An EP'} && !exists $t->{'Lib EP'});
+    is('by release: the artist underneath', $t->{'Mix LP'}{line2}, 'M');
+    is('by release: the web-skin name keeps the artist', $t->{'Mix LP'}{name}, 'Mix LP BY M');
+    is('by release: the badge of the LATEST play, not the older one', $t->{'Mix LP'}{extid}, 'qobuz:album:mx9');
+    ok('CONTROL: a library album has no badge', !exists $t->{'Local LP'}{extid});
+    ok('by release: a station is not a release', !exists $t->{'Jazz FM'});
+    ok('by release: a tile still drills into that release\'s plays', ref $t->{'Mix LP'}{url} eq 'CODE');
+    is('by release: EPs from Qobuz (stored) and the library (read live)',
+       join(',', sort keys %{ $open->('EPs') }), 'An EP,Lib EP');
+    is('by release: a single-track play sits under its release\'s type', join(',', keys %{ $open->('Singles') }), 'A Single');
+    is('by release: a library compilation whose type is ALBUM is a Compilation (Material\'s rule)',
+       join(',', keys %{ $open->('Compilations') }), 'Various');
+    $Slim::Schema::ALBUM_META{77} = { release_type => 'ALBUM' };
+    ok('by release: the library type is read LIVE (a retag moves it)',
+       exists $open->('Albums')->{'Lib EP'});
+    is('by release: an unknown type row opens empty', feed(\&Plugins::ListeningHistory::Browse::_releaseList, {}, { type => 'NOPE' })->[0]{name}, 'PLUGIN_LH_EMPTY');
+    Plugins::ListeningHistory::DB::remove($_) for $old, $new, $ep, $sg, $lep, $cmp;
+    delete @Slim::Schema::ALBUM_META{77, 78};
+}
+{
+    my $S = 'Plugins::ListeningHistory::Sources';
+    is('type order: Material\'s list first, others after A-Z',
+       join(',', $S->can('sortReleaseTypes')->(qw(SINGLE ZINE EP ALBUM ALBUM_LIVE COMPILATION))),
+       'ALBUM,EP,COMPILATION,SINGLE,ALBUM_LIVE,ZINE');
+    is('type label: an unknown type is spelled out', $S->can('releaseTypeLabel')->(undef, 'ALBUM LIVE'), 'Album Live');
+    is('type label: RELEASE_TYPE_ALBUMS is empty, so ALBUMS names it', $S->can('releaseTypeLabel')->(undef, 'ALBUM'), 'Albums');
+    {
+        no warnings 'once';
+        local *Slim::Schema::Album::releaseTypeName = sub { my (undef, $t) = @_; $t eq 'EP' ? 'Extended plays' : $t };
+        is('type label: LMS\'s own releaseTypeName wins when it names the type', $S->can('releaseTypeLabel')->(undef, 'EP'), 'Extended plays');
+        is('type label: and when LMS only echoes the type back, the lookup still names it', $S->can('releaseTypeLabel')->(undef, 'SINGLE'), 'Singles');
+    }
+    is('releaseType: no entry is an album', $S->can('releaseType')->(undef), 'ALBUM');
+    is('releaseType: Qobuz\'s "epmini" is an EP, even stored before the alias', $S->can('releaseType')->({ source => 'qobuz', ref => { release_type => 'EPMINI' } }), 'EP');
+    is('releaseType: a stored type is upper-cased', $S->can('releaseType')->({ source => 'qobuz', ref => { release_type => ' ep ' } }), 'EP');
 }
 
 # --- album resolution ----------------------------------------------------------------------------------

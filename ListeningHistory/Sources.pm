@@ -20,6 +20,9 @@ use Slim::Utils::Strings qw(cstring);
 
 my $log = logger('plugin.listeninghistory');
 
+# Qobuz album id -> its release type, for this server run (fetchReleaseType).
+my %QOBUZ_TYPE;
+
 # url scheme -> source tag, for the services whose tracks we can rebuild an album for.
 # (LL Sources.pm %SCHEME)
 my %SCHEME = (
@@ -226,6 +229,10 @@ sub describe {
             if (defined $aid) {
                 $d{ref}{svc_album_id} = $aid;
                 $d{ref}{svc}          = $source;
+                # Already asked this run (fetchReleaseType): an album promotion rewrites the
+                # entry's ref from THIS hash, so it must carry the type too.
+                my $rt = $source eq 'qobuz' ? $QOBUZ_TYPE{$aid} : undef;
+                $d{ref}{release_type} = $rt if $rt;
             }
         }
     }
@@ -351,6 +358,107 @@ sub resolveTracks {
         $answer->([]);
     };
     return;
+}
+
+# ---------------------------------------------------------------------------
+# Release type — ALBUM, EP, SINGLE, COMPILATION …, the types LMS groups an artist's releases by
+# (Simon, 2026-09-19: "By release … break them down like LMS"). Upper-case, as LMS stores them.
+# ---------------------------------------------------------------------------
+
+# The type of a stored entry's release. The LIBRARY is read live from LMS, so every entry
+# already in the history has one and a retag + rescan moves it. QOBUZ is what fetchReleaseType
+# stored when it played. Nothing else states a type (Tidal, Deezer and Spotify only through
+# their plugins' internals — declined fleet-wide, see the streaming-service-apis note), so
+# everything else is ALBUM, which is also what Material assumes for a release with no type.
+sub releaseType {
+    my ($e) = @_;
+    return 'ALBUM' unless ref $e eq 'HASH';
+    my $ref = ref $e->{ref} eq 'HASH' ? $e->{ref} : {};
+    if (($e->{source} // '') eq 'library' && $ref->{album_id}) {
+        my $t = _libraryReleaseType($ref->{album_id});
+        return $t if $t;
+    }
+    return _normType($ref->{release_type}) || 'ALBUM';
+}
+
+# A service's own spelling of an LMS type. Qobuz's album object says `epmini` for an EP (its
+# `album` / `single` already match), and its plugin shows that raw as "Epmini". Applied on every
+# read as well as on store, so an entry stored before the alias existed is read right too.
+my %TYPE_ALIAS = (EPMINI => 'EP');
+
+sub _normType {
+    my ($t) = @_;
+    return undef unless defined $t && !ref $t;
+    $t = uc $t;
+    $t =~ s/^\s+|\s+$//g;
+    return undef unless length $t;
+    return $TYPE_ALIAS{$t} // $t;
+}
+
+# LMS 8.4+ `albums.release_type`. Material's rule (browse-resp.js): a compilation whose type is
+# ALBUM, or has none, groups as COMPILATION.
+sub _libraryReleaseType {
+    my ($id) = @_;
+    my $alb = eval { Slim::Schema->find('Album', $id) } or return undef;
+    my $t = _normType(eval { $alb->release_type });
+    return 'COMPILATION' if eval { $alb->compilation } && (!$t || $t eq 'ALBUM');
+    return $t;
+}
+
+# The order Material lists release types in (browse-resp.js RELEASE_TYPES); any other type
+# follows, A–Z.
+my @TYPE_ORDER = qw(ALBUM EP BOXSET BESTOF COMPILATION SINGLE APPEARANCE);
+my %TYPE_RANK  = map { $TYPE_ORDER[$_] => $_ } 0 .. $#TYPE_ORDER;
+
+sub sortReleaseTypes {
+    return sort { ($TYPE_RANK{$a} // @TYPE_ORDER) <=> ($TYPE_RANK{$b} // @TYPE_ORDER) || $a cmp $b } @_;
+}
+
+# The plural name LMS gives a type: "Albums", "EPs", "Singles". LMS's own
+# Slim::Schema::Album::releaseTypeName (8.4+) — the name its library uses — when it is there;
+# otherwise the same lookup, copied: RELEASE_TYPE_<T>S, RELEASE_TYPE_CUSTOM_<T>, <T>S,
+# RELEASE_TYPE_<T>, <T> — the first that exists and is not empty (RELEASE_TYPE_ALBUMS is empty,
+# so ALBUM lands on ALBUMS) — else the type spelled out.
+sub releaseTypeLabel {
+    my ($client, $type) = @_;
+    $type //= '';
+    if (Slim::Schema::Album->can('releaseTypeName')) {
+        my $name = eval { Slim::Schema::Album->releaseTypeName($type, $client) };
+        return $name if defined $name && length $name && $name ne $type;
+    }
+    (my $tok = uc $type) =~ s/[^A-Z_0-9]/_/g;
+    for my $s ("RELEASE_TYPE_${tok}S", "RELEASE_TYPE_CUSTOM_$tok", "${tok}S", "RELEASE_TYPE_$tok", $tok) {
+        next unless Slim::Utils::Strings::stringExists($s);
+        my $name = cstring($client, $s);
+        return $name if defined $name && length $name;
+    }
+    return join ' ', map { ucfirst lc } split /\s+/, $type;
+}
+
+# Ask Qobuz for a release's type: its album object states album / ep / single (LL
+# Sources::classifyRelType uses the same call). Once per album per server run; $cb gets the
+# upper-cased type, or undef. Every other source answers undef at once.
+sub fetchReleaseType {
+    my ($client, $source, $aid, $cb) = @_;
+    return $cb->(undef) unless ($source // '') eq 'qobuz' && defined $aid && length $aid;
+    return $cb->($QOBUZ_TYPE{$aid}) if $QOBUZ_TYPE{$aid};
+    my $api = Plugins::Qobuz::Plugin->can('getAPIHandler')
+        ? eval { Plugins::Qobuz::Plugin::getAPIHandler($client) } : undef;
+    return $cb->(undef) unless $api && $api->can('getAlbum');
+    my $done;
+    my $ok = eval {
+        $api->getAlbum(sub {
+            return if $done++;
+            my $album = shift;
+            my $rt = _normType(ref $album eq 'HASH' ? $album->{release_type} : undef);
+            $QOBUZ_TYPE{$aid} = $rt if $rt;
+            $cb->($rt);
+        }, $aid);
+        1;
+    };
+    return if $ok;
+    $log->warn("Listening History: Qobuz getAlbum died: $@");
+    $cb->(undef) unless $done++;
 }
 
 1;

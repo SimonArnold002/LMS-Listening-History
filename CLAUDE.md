@@ -10,7 +10,8 @@ artist, album, service, player, or search by text, date or date range; every lis
 Skin preferred. Built 2026-09-18 from Simon's brief, in the shape of Listen Later / LBF / PFR.
 
 ## Branches and releasing
-- **1.0.4 is the first release**: merged to `main` and tagged `v1.0.4` on 2026-09-19.
+- **1.0.4 is the first release**: merged to `main` and tagged `v1.0.4` on 2026-09-19. **1.0.5** (year search,
+  By date years) released and tagged `v1.0.5` the same day.
 - Work happens on `dev`. `dev` mirrors `main` except for ONE line, the `repo.xml` `<url>`:
   - main: `https://simonarnold002.github.io/LMS-Listening-History/ListeningHistory.zip` (Pages)
   - dev: `https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/dev/ListeningHistory.zip`
@@ -36,6 +37,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | `played_threshold` 90%, 60s fallback | **DECIDED by Simon 2026-09-18**: Listen Later's rule | `THE 90% RULE` |
 | radio recorded as a station row | **DECIDED by Simon 2026-09-18** | `RADIO IS A STATION ROW` |
 | By service menu, sort row `_sortRow`/`sortEntries`, date search `parseDateSearch` | **DECIDED by Simon 2026-09-18** (0.1.3) | `DATES, SERVICE MENU, SORT` |
+| By release `_releases`/`_releaseList`; type = `Sources::releaseType` (library live, Qobuz stored via `fetchReleaseType`, else ALBUM) | **DECIDED by Simon 2026-09-19** | `BY RELEASE, BROKEN DOWN LIKE LMS` |
 | year search `parseYearSearch` = a "Played in" row ABOVE the text matches; By date years `_dates`/`_months` + "All of" | **DECIDED by Simon 2026-09-19** | `A YEAR IS ALSO A NAME` |
 | home shelf title `PLUGIN_LH`, not "Recently played" | **DECIDED by Simon 2026-09-18**: avoids confusion with Material's own Recently Played | `SHELF TITLE` |
 | `Sources::albumKey` name fallback, `primaryArtist` | deliberate: first credit only | `THE NAME KEY USES THE FIRST CREDIT` |
@@ -99,6 +101,42 @@ can be DISPROVEN. Closing a round is not a suppression.
   - Service is not a sort mode: the By service menu covers it.
   - Date search (`parseDateSearch`) is a single date OR a range, **day-first** (UK). There is no
     month-first guessing: `09/18/2026` is text, not a date.
+- **BY RELEASE, BROKEN DOWN LIKE LMS (`_releases`, `_releaseList`, `Sources::releaseType`) — Simon, 2026-09-19.**
+  *"This is purely how to group the tracks played together as we see them in a view, so a single with two
+  tracks shows as how the single would as one entry, same for EP's, we just need By release instead of By
+  album and then break them down like LMS."* So:
+  - GROUPING IS UNCHANGED. Tracks group by their RELEASE (`albumKey`: library album id, service album id,
+    else name + first credit), whatever its type: a two-track single or an EP played through is ONE entry,
+    shown like any release. No type label on any row (`A ROW READS LIKE A RELEASE` stands).
+  - **By album → By release** (`PLUGIN_LH_BY_RELEASE`). It opens one row per TYPE with its count —
+    Albums / EPs / Singles / Compilations … — each opening its release tiles (the old By album tiles).
+    Simon chose type rows over in-list headers (headers need Material's feature flags passed down; rows
+    work on every skin).
+  - Names: LMS's own `Slim::Schema::Album::releaseTypeName` (8.4+), else the same string lookup copied.
+    Order: Material's `RELEASE_TYPES` (ALBUM EP BOXSET BESTOF COMPILATION SINGLE APPEARANCE), others after A–Z.
+  - A release's type is its MOST RECENT play's (`DB::albums` `last_id`), the same entry that gives the badge.
+  - **Library**: read LIVE from `albums.release_type` by `ref.album_id` — every past entry has one, and a
+    retag + rescan moves it. Material's rule: a compilation whose type is ALBUM (or none) is COMPILATION.
+  - **Qobuz**: its album object states `release_type` (album / ep / single); the cached track meta does
+    NOT (checked upstream `precacheTrack`). `Tracker` calls `Sources::fetchReleaseType` once per album per
+    server run after recording, and `DB::setReleaseType` MERGES it into the entry's ref. `describe` carries
+    a type already known this run, because an album promotion rewrites the ref from the second track.
+    Qobuz entries recorded before 1.0.6 have no type and sit under Albums until played again.
+  - **Qobuz spells an EP `epmini`** (its `album` / `single` match LMS). 1.0.6 stored it raw and By release
+    showed an "Epmini (1)" row on the rig (Simon, 2026-09-19 — VERIFIED LIVE that the Qobuz lookup runs).
+    `Sources::%TYPE_ALIAS` maps EPMINI → EP on EVERY read, so an entry already stored as EPMINI reads as an
+    EP with no data change. Anti-tested: alias removed, 1 + 2 red. (LL's `_normRelType` has the same gap:
+    `/\bep\b/` does not match `epmini` — reported to Simon, not changed.)
+  - **Tidal / Deezer / Spotify / Bandcamp**: no type → ALBUM, as Material assumes. Reaching into the
+    plugins' internals for one was DECLINED fleet-wide (2026-07-25, re-confirmed 2026-09-02); do not
+    re-propose it here.
+  Guard: `t_browse.pl` (type rows, names, counts, order; each type's tiles; library live + retag; the
+  compilation rule; LMS's releaseTypeName vs the fallback), `t_tracker.pl` (asked once, an answer after the
+  promotion lands and keeps the album ref, an answer before it survives it, Deezer asks nobody,
+  `fetchReleaseType` direct), `t_db.pl` (`setReleaseType` merge / refusals). Anti-tested, 11 mutations,
+  each red (library not live 3, compilation rule 1, stored type ignored 3, order 2, empty-name skip 1,
+  per-run cache 1, describe not carrying the type 1, tracker never asks 6, ref overwritten 1+1, type rows
+  not filtered 5).
 - **A YEAR IS ALSO A NAME (`parseYearSearch`, `_searchResults`) — Simon, 2026-09-19.** *"search by year as
   well as exact date … and can we have year option when browsing"*. A search that is a year (`2025`) or two
   years joined like a date range (`2024 - 2025`, either order) answers with a **"Played in 2025 (n)"** row
@@ -180,7 +218,7 @@ can be DISPROVEN. Closing a round is not a suppression.
     = album and `line2` = artist. `Slim::Control::XMLBrowser` sends Material `(line1 || name) . "\n" .
     line2`, so Material is unchanged. *"If I switch to webskin LMS doesnt loose the artist for its standard
     views."* Do not drop `line1`: without it Material shows "Album by Artist" as the title (17 red).
-  - **The By album tiles too** (`_albums`, found from Simon's screenshot the same day): the album over the
+  - **The By album tiles too** (`_albums`, now `_releaseList` under By release — see `BY RELEASE, BROKEN DOWN LIKE LMS`; found from Simon's screenshot the same day): the album over the
     artist, no `– Artist (n)` label, and `extid` from the group's MOST RECENT entry (`DB::albums` now returns
     `last_id`; a group can mix sources, and the latest play is the one badged). A library album stays
     unbadged. `DASH` removed. By artist / By player / By service tiles are not releases and keep their
@@ -206,8 +244,10 @@ can be DISPROVEN. Closing a round is not a suppression.
 
 - **UNVERIFIED LIVE (2026-09-18).** Installed on plex:9000 since 0.1.0 and Simon
   reports it working in general use; the service badge is verified live (§A2). 1.0.4 (single-track naming)
-  built 2026-09-19 and RELEASED to `main` (`v1.0.4`). 1.0.5 (year search + By date years) built on dev
-  2026-09-19. Neither installed on the rig yet. These specific paths have not been checked individually and are covered by
+  built 2026-09-19 and RELEASED to `main` (`v1.0.4`). 1.0.5 (year search + By date years) released to
+  `main` (`v1.0.5`) 2026-09-19. 1.0.6 (By release) built on dev and installed 2026-09-19 (Qobuz lookup verified live); 1.0.7
+  (Qobuz `epmini` → EP) built and INSTALLED the same day; VERIFIED LIVE: By release = Albums / EPs / Singles,
+  the stored EPMINI entry reads as an EP. Neither installed on the rig yet. These specific paths have not been checked individually and are covered by
   the suites only:
   - `Sources::isStation` — any remote non-service url with no duration is a station. Not checked
     against TuneIn, Radio Paradise, BBC Sounds.
@@ -310,7 +350,7 @@ V=1 perl tools/t_tracker.pl
 |---|---|
 | `t_tracker.pl` | the grouping rules end to end through the real callback + timers: one track, album promotion, A/B/A, stop, same url, gap, two players, skip, pause, Qobuz id grouping, first-credit grouping, Spotty error text, radio once per session (+ the deadline), a web track with no length at start is not timed as radio (skip at 61s of 300 not recorded), removed-mid-album |
 | `t_db.pl` | schema stamp + re-open, promote in one transaction, no orphan play on a missing entry, literal `%`/`_` search, indexes, forDay injection, remove/purge cascade, a failed COMMIT reported as failure by addToEntry/remove/purge |
-| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is one line "Title by Artist from Album" (each clause dropped alone; no second line), a station has no second line, By album tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), year search (the Played in row above the text matches, ranges, a numeric name) and By date years (All of + months), context menu + remove, unticked checkbox stores 0 |
+| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is one line "Title by Artist from Album" (each clause dropped alone; no second line), a station has no second line, By release (type rows in LMS order and names with counts, each opening its releases; library type read LIVE incl. Material's compilation rule, Qobuz type stored; LMS's releaseTypeName preferred) and its tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), year search (the Played in row above the text matches, ranges, a numeric name) and By date years (All of + months), context menu + remove, unticked checkbox stores 0 |
 | `t_load.pl` | every module loads; every `Plugins::ListeningHistory::X::y` call is defined |
 
 Version history: `docs/VERSION-HISTORY.md`.

@@ -3,7 +3,7 @@
     <title lang="EN">Listening History</title>
   </details>
   <plugins>
-    <plugin name="ListeningHistory" version="1.0.5" minTarget="9.0.0" maxTarget="*">
+    <plugin name="ListeningHistory" version="1.0.7" minTarget="9.0.0" maxTarget="*">
       <title lang="EN">Listening History</title>
       <desc lang="EN">A play history across every player, for library and streaming music: a played album is one entry, a lone track is a track entry, and every entry plays again</desc>
       <category>musicservices</category>
@@ -12,7 +12,7 @@
       <link>https://simonarnold002.github.io/LMS-Listening-History/README.html</link>
       <creator>CrystalGipsy</creator>
       <email></email>
-      <sha>2d57ecf390544455753069b71c51820c33daf451</sha>
+      <sha>775fcef641e9940638d1f1313b9cd70e4ccebf67</sha>
     </plugin>
   </plugins>
 </extensions>

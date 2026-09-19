@@ -228,6 +228,23 @@ sub addToEntry {
     return $ok;
 }
 
+# Store a release type in an entry's ref (Tracker, when Qobuz answers). Merged into the ref as
+# it is NOW, so a promotion in between keeps its album reference.
+sub setReleaseType {
+    my ($id, $rt) = @_;
+    return 0 unless defined $id && $id =~ /^\d+$/ && defined $rt && $rt =~ /^[A-Z0-9 _]{1,40}$/;
+    my $ok = 0;
+    _txn('storing a release type', sub {
+        my ($h) = @_;
+        my $row = $h->selectrow_arrayref('SELECT ref_json FROM entries WHERE id = ?', undef, $id) or return;
+        my $ref = eval { $JSON->decode($row->[0] // '{}') } || {};
+        $ref->{release_type} = $rt;
+        $h->do('UPDATE entries SET ref_json = ? WHERE id = ?', undef, $JSON->encode($ref), $id);
+        $ok = 1;
+    }) or return 0;
+    return $ok;
+}
+
 sub _insertPlay {
     my ($h, $entryId, $p, $when) = @_;
     $h->do('INSERT INTO plays (entry_id, url, title, artist, album, duration, played_at)

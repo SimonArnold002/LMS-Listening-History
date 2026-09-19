@@ -241,6 +241,14 @@ sub _record {
         played_at   => $now,
     }, $play) or return;
 
+    # A Qobuz release states its type (album / EP / single) only on its album object: ask once,
+    # and store it on the entry when the answer comes (Browse::_releases groups by it).
+    if (!$d->{ref}{release_type} && $d->{ref}{svc_album_id}) {
+        Plugins::ListeningHistory::Sources::fetchReleaseType($client, $d->{source}, $d->{ref}{svc_album_id}, sub {
+            Plugins::ListeningHistory::DB::setReleaseType($id, $_[0]) if $_[0];
+        });
+    }
+
     $session{$cid} = {
         entry_id  => $id,
         kind      => 'track',
