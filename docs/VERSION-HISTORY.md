@@ -129,3 +129,13 @@ round's two fixes (CLAUDE.md §C):
   a tail on line2, an "Artist – Album" name, the oldest play badged, and the tile badge dropped each
   turn `t_browse` red.
 - Zip sha `321c3ecb2481b1b0f2f4bcee9ffc68f5893f5126`. `repo.xml` still untouched.
+
+## After 1.0.2 — 2026-09-19 (dev, source only, NOT BUILT) — web skins keep the artist
+
+- Review of `e70f803` (1.0.2): on the Default / Classic web skins, which draw `name` only, rows
+  and By album tiles had lost the artist. `Browse::_titled` now gives a release row `name` =
+  "Album by Artist" (core string `BY`) plus `line1` / `line2` for Material, which LMS sends as
+  line1 over line2 — Material is unchanged. See CLAUDE.md `THE WEB SKINS KEEP THE ARTIST IN THE NAME`.
+- Tests 235 → 240 (t_browse 103 → 108). Anti-tested: web name without the artist 3 red; `line1`
+  dropped 17 red.
+- The committed zip is still the 1.0.2 build WITHOUT this fix; the next build takes a new version.

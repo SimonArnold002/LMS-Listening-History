@@ -35,6 +35,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | `LIST_CAP` 1000 per browse list | deliberate, and says so on the list | `LIST_CAP` |
 | service badge `Sources::extid` / row `extid`; NO service name in `entryRow` line2 | **DECIDED by Simon 2026-09-18** (1.0.1) | `THE SERVICE IS A BADGE` |
 | `entryRow` text: Album (or Title) over Artist, no count / player / time on the row; `_when`, `PLUGIN_LH_TRACKS_OF`, `PLUGIN_LH_FROM` removed | **DECIDED by Simon 2026-09-19** | `A ROW READS LIKE A RELEASE` |
+| `_titled`: web-skin `name` = "Album by Artist", Material gets `line1` over `line2` | **DECIDED by Simon 2026-09-19** (1.0.2 review) | `THE WEB SKINS KEEP THE ARTIST IN THE NAME` |
 | back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
 | app/shelf logo `ListeningHistoryIcon` = Google `music_history`, not Material's `history` glyph | **KEPT by Simon 2026-09-18** | `THE LOGO STAYS` |
 | "More by this artist" context entry | DROPPED at build; By artist covers it | `MORE BY THIS ARTIST` |
@@ -135,6 +136,12 @@ can be DISPROVEN. Closing a round is not a suppression.
     player and the date/time (`_join`, `_when`, `SEP`, `GLYPH_*`, and six unused strings removed). The
     data is still stored and the sort row still orders by date, artist or album.
   - A station has no second line; a row with no artist likewise.
+  - **THE WEB SKINS KEEP THE ARTIST IN THE NAME (`_titled`) — Simon, 2026-09-19, from the 1.0.2 review.**
+    Default / Classic draw `name` only (never line2), so a bare title there lost the artist. A release row
+    now carries `name` = "Album by Artist" (core string `BY`, as LMS's own web lists word it) plus `line1`
+    = album and `line2` = artist. `Slim::Control::XMLBrowser` sends Material `(line1 || name) . "\n" .
+    line2`, so Material is unchanged. *"If I switch to webskin LMS doesnt loose the artist for its standard
+    views."* Do not drop `line1`: without it Material shows "Album by Artist" as the title (17 red).
   - **The By album tiles too** (`_albums`, found from Simon's screenshot the same day): the album over the
     artist, no `– Artist (n)` label, and `extid` from the group's MOST RECENT entry (`DB::albums` now returns
     `last_id`; a group can mix sources, and the latest play is the one badged). A library album stays
@@ -171,6 +178,14 @@ can be DISPROVEN. Closing a round is not a suppression.
     present), the home shelf, and the search row.
 
 ### C. CLOSED FINDINGS
+
+**Review round 2026-09-19 (unpushed `e70f803`, 1.0.2) — CLOSED, one defect reported twice, FIXED.**
+`entryRow` (history rows) and `_albums` (By album tiles) moved the artist onto line2 only, which the
+Default / Classic web skins never draw — two plays of "Intro" by different artists, or two "Greatest Hits"
+tiles, became indistinguishable there. Fixed with `_titled` (§A2 `THE WEB SKINS KEEP THE ARTIST IN THE
+NAME`). t_browse 103 → 108; anti-tested (web name without the artist: 3 red; `line1` dropped: 17 red).
+Cleared in the same round: nothing still uses the removed helpers/strings, `POSIX` is still needed, the
+`last_id` subquery matches rows as the grouping and `forAlbum` do, and the badge path gets a decoded `ref`.
 
 **Review round 2026-09-18 (whole plugin at 0.1.1, not a git repo yet so no diff) — CLOSED,
 three findings, all FIXED in 0.1.2.** Details and tests in `docs/VERSION-HISTORY.md` 0.1.2.

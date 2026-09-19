@@ -22,6 +22,9 @@ sub add {
     return $id;
 }
 sub feed { my ($code, @args) = @_; my $out; $code->(undef, sub { $out = shift }, @args); return $out->{items} }
+# The first line Material shows: Slim::Control::XMLBrowser sends (line1 || name) . "\n" . line2 when
+# line2 is set, and the bare name otherwise. The web skins show `name` alone.
+sub shown { my ($r) = @_; return defined $r->{line2} ? ($r->{line1} // $r->{name}) : $r->{name} }
 
 # --- the shelf -----------------------------------------------------------------------------------
 my $now = time();
@@ -29,9 +32,9 @@ add(title => "Song $_", artist => 'A', url => "file:///$_", played_at => $now) f
 my $shelf = feed(\&Plugins::ListeningHistory::Browse::homeShelf, {});
 is('shelf: exactly 50 of 60', scalar @$shelf, 50);
 is('shelf: flat — no header or text rows', scalar(grep { ($_->{type} // '') =~ /header|text/ } @$shelf), 0);
-is('shelf: newest first even when played_at ties', $shelf->[0]{name}, "Song 60");
+is('shelf: newest first even when played_at ties', shown($shelf->[0]), "Song 60");
 my $again = feed(\&Plugins::ListeningHistory::Browse::homeShelf, {});
-is('shelf: the same order on every request', join('|', map { $_->{name} } @$again), join('|', map { $_->{name} } @$shelf));
+is('shelf: the same order on every request', join('|', map { shown($_) } @$again), join('|', map { shown($_) } @$shelf));
 my @ex = @Plugins::MaterialSkin::HomeExtraBase::INIT;
 Plugins::ListeningHistory::HomeExtras->initPlugin;
 my $reg = $Plugins::MaterialSkin::HomeExtraBase::INIT[-1];
@@ -46,14 +49,19 @@ my $lib = add(kind => 'album', artist => 'Lib', album => 'Local LP', url => 'fil
               plays => [ { url => 'file:///a/1', title => 'One' }, { url => 'file:///a/2', title => 'Two' } ]);
 my $trk = add(title => 'Solo', artist => 'Lib', album => 'Local LP', url => 'file:///a/3');
 my $sta = add(kind => 'station', source => 'radio', title => 'Jazz FM', url => 'http://jazz/stream');
-my %row = map { $_->{name} => $_ } @{ feed(\&Plugins::ListeningHistory::Browse::_recent, {}) };
+my %row = map { shown($_) => $_ } @{ feed(\&Plugins::ListeningHistory::Browse::_recent, {}) };
 
 my $albumRow = $row{'Local LP'};
 is('album row: type playlist', $albumRow->{type}, 'playlist');
 ok('album row: a coderef url', ref $albumRow->{url} eq 'CODE');
 # The same two lines as any release in LMS: title on top, artist underneath, nothing else.
-is('album row: the album on top', $albumRow->{name}, 'Local LP');
+is('album row: the album on top', $albumRow->{line1}, 'Local LP');
 is('album row: the artist underneath, and only the artist', $albumRow->{line2}, 'Lib');
+# The Default / Classic web skins draw `name` alone, so it keeps the artist, worded as LMS's own
+# web lists word it (core string BY; the stub returns the token).
+is('album row: the web-skin name keeps the artist', $albumRow->{name}, 'Local LP BY Lib');
+is('track row: the web-skin name keeps the artist', $row{'Solo'}{name}, 'Solo BY Lib');
+is('station row: the name alone, no "by"', $row{'Jazz FM'}{name}, 'Jazz FM');
 is('album row: has the "…" menu', $albumRow->{itemActions}{info}{command}[1], 'contextmenu');
 is('track row: type audio', $row{'Solo'}{type}, 'audio');
 is('track row: plays its url', $row{'Solo'}{url}, 'file:///a/3');
@@ -77,12 +85,14 @@ ok('station row: no second line (a station has no artist)', !exists $row{'Jazz F
     is('a plain web track: no badge', $R->({ source => 'https', url => 'https://x/1.mp3' })->{extid}, undef);
     my $qa = add(kind => 'album', source => 'qobuz', artist => 'Q', album => 'Q LP', url => 'qobuz://9.flac',
                  ref => { svc_album_id => 'abc123', svc => 'qobuz' });
-    my ($qrow) = grep { ($_->{name} // '') eq 'Q LP' } @{ feed(\&Plugins::ListeningHistory::Browse::_recent, {}) };
+    my ($qrow) = grep { (shown($_) // '') eq 'Q LP' } @{ feed(\&Plugins::ListeningHistory::Browse::_recent, {}) };
     is('album row with the service album id: the real extid, through the DB', $qrow->{extid}, 'qobuz:album:abc123');
     is('album row with no id: bare prefix', $R->({ kind => 'album', source => 'deezer', url => 'deezer://1.mp3' })->{extid}, 'deezer:');
     my $qt = $R->({ source => 'qobuz', url => 'qobuz://1.flac', artist => 'Q Artist', player_name => 'Kitchen' });
     is('line2 is the artist alone: no service, no player, no time', $qt->{line2}, 'Q Artist');
-    ok('no artist, no second line', !exists $R->({ source => 'qobuz', url => 'qobuz://2.flac' })->{line2});
+    my $bare = $R->({ source => 'qobuz', url => 'qobuz://2.flac', title => 'Bare' });
+    ok('no artist, no second line and no line1', !exists $bare->{line2} && !exists $bare->{line1});
+    is('no artist: the web-skin name is the title alone', $bare->{name}, 'Bare');
     Plugins::ListeningHistory::DB::remove($qa);
 }
 
@@ -92,9 +102,10 @@ ok('station row: no second line (a station has no artist)', !exists $row{'Jazz F
                   played_at => time() - 100);
     my $new = add(kind => 'album', source => 'qobuz', artist => 'M', album => 'Mix LP', url => 'qobuz://2.flac',
                   ref => { svc_album_id => 'mx9' }, played_at => time());
-    my %t = map { $_->{name} => $_ } @{ feed(\&Plugins::ListeningHistory::Browse::_albums, {}) };
+    my %t = map { shown($_) => $_ } @{ feed(\&Plugins::ListeningHistory::Browse::_albums, {}) };
     ok('by album: named by the album alone, no artist, no count', exists $t{'Mix LP'} && exists $t{'Local LP'});
     is('by album: the artist underneath', $t{'Mix LP'}{line2}, 'M');
+    is('by album: the web-skin name keeps the artist', $t{'Mix LP'}{name}, 'Mix LP BY M');
     is('by album: the badge of the LATEST play, not the older one', $t{'Mix LP'}{extid}, 'qobuz:album:mx9');
     ok('CONTROL: a library album has no badge', !exists $t{'Local LP'}{extid});
     ok('by album: a station is not an album tile', !exists $t{'Jazz FM'});

@@ -352,7 +352,7 @@ sub _albums {
     my @items = map {
         my $item = _link($client, \$_->{album}, $_->{artwork} || I_ALBUM, \&_album,
             { album => $_->{album}, artist => $_->{artist} });
-        $item->{line2} = $_->{artist} if length $_->{artist};
+        %$item = (%$item, _titled($client, $_->{album}, $_->{artist}));
         my $last  = Plugins::ListeningHistory::DB::get($_->{last_id});
         my $extid = $last ? Plugins::ListeningHistory::Sources::extid($last) : undef;
         $item->{extid} = $extid if defined $extid;
@@ -435,8 +435,7 @@ sub entryRow {
     my $extid  = Plugins::ListeningHistory::Sources::extid($e);
 
     return {
-        name        => $name,
-        (defined $artist && length $artist ? (line2 => $artist) : ()),
+        _titled($client, $name, $artist),
         image       => $e->{artwork} || ICON,
         (defined $extid ? (extid => $extid) : ()),
         %play,
@@ -451,6 +450,18 @@ sub entryRow {
 
 # Drill-in and play of an album row: the whole album where the library or the service can
 # rebuild it, otherwise the tracks that were played.
+# The title fields of a release-shaped row. Material (and any CLI client) gets `line1` over
+# `line2` — Slim::Control::XMLBrowser sends (line1 || name) . "\n" . line2 when line2 is set —
+# so it shows the album over the artist. The Default / Classic web skins draw only `name`, so
+# that carries the artist too, worded the way LMS's own web lists word it: "Ox by Palace"
+# (core string BY). Found by the 1.0.2 review: without it the web skins lost the artist.
+sub _titled {
+    my ($client, $what, $artist) = @_;
+    return (name => $what) unless defined $artist && length $artist;
+    return (name  => $what . ' ' . cstring($client, 'BY') . ' ' . $artist,
+            line1 => $what, line2 => $artist);
+}
+
 sub _entryTracks {
     my ($client, $cb, $args, $pt) = @_;
     my $e = Plugins::ListeningHistory::DB::get($pt->{id});
