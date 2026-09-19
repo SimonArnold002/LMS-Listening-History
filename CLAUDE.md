@@ -247,7 +247,7 @@ can be DISPROVEN. Closing a round is not a suppression.
   built 2026-09-19 and RELEASED to `main` (`v1.0.4`). 1.0.5 (year search + By date years) released to
   `main` (`v1.0.5`) 2026-09-19. 1.0.6 (By release) built on dev and installed 2026-09-19 (Qobuz lookup verified live); 1.0.7
   (Qobuz `epmini` → EP) built and INSTALLED the same day; VERIFIED LIVE: By release = Albums / EPs / Singles,
-  the stored EPMINI entry reads as an EP. Neither installed on the rig yet. These specific paths have not been checked individually and are covered by
+  the stored EPMINI entry reads as an EP. These specific paths have not been checked individually and are covered by
   the suites only:
   - `Sources::isStation` — any remote non-service url with no duration is a station. Not checked
     against TuneIn, Radio Paradise, BBC Sounds.
