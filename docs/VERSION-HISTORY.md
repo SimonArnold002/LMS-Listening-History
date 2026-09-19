@@ -115,3 +115,17 @@ round's two fixes (CLAUDE.md §C):
 - Tests 214 → 230. Mutation-checked: the row's extid removed, the service name put back in line2,
   no `sounds`→`bbc`, no url-scheme fallback, no real album extid, and no `deezerpodcast` map. Each
   turns `t_browse` red.
+
+## 1.0.2 — 2026-09-19 (dev) — rows read like a release
+
+- `entryRow`: the album (a track: its title; a station: its name) over the artist, nothing else.
+  The `Artist – ` prefix, glyphs, "N of M tracks", "from <album>", player and date/time are gone
+  from the row; the data is still stored and the sort row still orders by it. See CLAUDE.md
+  `A ROW READS LIKE A RELEASE`.
+- By album tiles (`_albums`): album over artist, no count, and the service badge of the group's most
+  recent play (`DB::albums` returns `last_id`). Found from Simon's screenshot: those tiles had no badge.
+- Removed: `_join`, `_when`, `SEP`, `DASH`, `GLYPH_*` and six unused strings.
+- Tests 230 → 235 (t_browse 98 → 103; the old date/count assertions replaced). Mutation-checked:
+  a tail on line2, an "Artist – Album" name, the oldest play badged, and the tile badge dropped each
+  turn `t_browse` red.
+- Zip sha `321c3ecb2481b1b0f2f4bcee9ffc68f5893f5126`. `repo.xml` still untouched.

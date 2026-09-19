@@ -29,7 +29,7 @@ add(title => "Song $_", artist => 'A', url => "file:///$_", played_at => $now) f
 my $shelf = feed(\&Plugins::ListeningHistory::Browse::homeShelf, {});
 is('shelf: exactly 50 of 60', scalar @$shelf, 50);
 is('shelf: flat — no header or text rows', scalar(grep { ($_->{type} // '') =~ /header|text/ } @$shelf), 0);
-is('shelf: newest first even when played_at ties', $shelf->[0]{name}, "A \x{2013} Song 60");
+is('shelf: newest first even when played_at ties', $shelf->[0]{name}, "Song 60");
 my $again = feed(\&Plugins::ListeningHistory::Browse::homeShelf, {});
 is('shelf: the same order on every request', join('|', map { $_->{name} } @$again), join('|', map { $_->{name} } @$shelf));
 my @ex = @Plugins::MaterialSkin::HomeExtraBase::INIT;
@@ -48,21 +48,24 @@ my $trk = add(title => 'Solo', artist => 'Lib', album => 'Local LP', url => 'fil
 my $sta = add(kind => 'station', source => 'radio', title => 'Jazz FM', url => 'http://jazz/stream');
 my %row = map { $_->{name} => $_ } @{ feed(\&Plugins::ListeningHistory::Browse::_recent, {}) };
 
-my $albumRow = $row{"Lib \x{2013} Local LP"};
+my $albumRow = $row{'Local LP'};
 is('album row: type playlist', $albumRow->{type}, 'playlist');
 ok('album row: a coderef url', ref $albumRow->{url} eq 'CODE');
-like_('album row: counts tracks of the total', $albumRow->{line2}, qr/3 of 3 tracks/);
+# The same two lines as any release in LMS: title on top, artist underneath, nothing else.
+is('album row: the album on top', $albumRow->{name}, 'Local LP');
+is('album row: the artist underneath, and only the artist', $albumRow->{line2}, 'Lib');
 is('album row: has the "…" menu', $albumRow->{itemActions}{info}{command}[1], 'contextmenu');
-is('track row: type audio', $row{"Lib \x{2013} Solo"}{type}, 'audio');
-is('track row: plays its url', $row{"Lib \x{2013} Solo"}{url}, 'file:///a/3');
-like_('track row: names its album', $row{"Lib \x{2013} Solo"}{line2}, qr/from Local LP/);
+is('track row: type audio', $row{'Solo'}{type}, 'audio');
+is('track row: plays its url', $row{'Solo'}{url}, 'file:///a/3');
+is('track row: the artist underneath, and only the artist', $row{'Solo'}{line2}, 'Lib');
 is('station row: type audio', $row{'Jazz FM'}{type}, 'audio');
 is('station row: plays the station', $row{'Jazz FM'}{url}, 'http://jazz/stream');
+ok('station row: no second line (a station has no artist)', !exists $row{'Jazz FM'}{line2});
 
 # --- service badge (extid) and no service name in line2 ---------------------------------------------
 {
     my $R = sub { Plugins::ListeningHistory::Browse::entryRow(undef, { kind => 'track', played_at => 1, %{ $_[0] } }) };
-    ok('library row: no extid (no badge)', !exists $albumRow->{extid} && !exists $row{"Lib \x{2013} Solo"}{extid});
+    ok('library row: no extid (no badge)', !exists $albumRow->{extid} && !exists $row{'Solo'}{extid});
     is('plain radio: no extid', $row{'Jazz FM'}{extid}, undef);
     is('qobuz track: badge prefix', $R->({ source => 'qobuz', url => 'qobuz://1.flac' })->{extid}, 'qobuz:');
     is('tidal track', $R->({ source => 'tidal', url => 'tidal://2.flc' })->{extid}, 'tidal:');
@@ -74,14 +77,29 @@ is('station row: plays the station', $row{'Jazz FM'}{url}, 'http://jazz/stream')
     is('a plain web track: no badge', $R->({ source => 'https', url => 'https://x/1.mp3' })->{extid}, undef);
     my $qa = add(kind => 'album', source => 'qobuz', artist => 'Q', album => 'Q LP', url => 'qobuz://9.flac',
                  ref => { svc_album_id => 'abc123', svc => 'qobuz' });
-    my ($qrow) = grep { ($_->{name} // '') eq "Q \x{2013} Q LP" } @{ feed(\&Plugins::ListeningHistory::Browse::_recent, {}) };
+    my ($qrow) = grep { ($_->{name} // '') eq 'Q LP' } @{ feed(\&Plugins::ListeningHistory::Browse::_recent, {}) };
     is('album row with the service album id: the real extid, through the DB', $qrow->{extid}, 'qobuz:album:abc123');
     is('album row with no id: bare prefix', $R->({ kind => 'album', source => 'deezer', url => 'deezer://1.mp3' })->{extid}, 'deezer:');
-    my $qt = $R->({ source => 'qobuz', url => 'qobuz://1.flac', player_name => 'Kitchen' });
-    unlike_('line2 no longer names the service', $qt->{line2}, qr/Qobuz/);
-    unlike_('line2 no longer says Library', $row{"Lib \x{2013} Solo"}{line2}, qr/Library/);
-    like_('line2 still carries the player (control)', $qt->{line2}, qr/Kitchen/);
+    my $qt = $R->({ source => 'qobuz', url => 'qobuz://1.flac', artist => 'Q Artist', player_name => 'Kitchen' });
+    is('line2 is the artist alone: no service, no player, no time', $qt->{line2}, 'Q Artist');
+    ok('no artist, no second line', !exists $R->({ source => 'qobuz', url => 'qobuz://2.flac' })->{line2});
     Plugins::ListeningHistory::DB::remove($qa);
+}
+
+# --- By album: a tile reads like a release and wears the badge of its latest play ---------------------
+{
+    my $old = add(kind => 'album', source => 'deezer', artist => 'M', album => 'Mix LP', url => 'deezer://1.mp3',
+                  played_at => time() - 100);
+    my $new = add(kind => 'album', source => 'qobuz', artist => 'M', album => 'Mix LP', url => 'qobuz://2.flac',
+                  ref => { svc_album_id => 'mx9' }, played_at => time());
+    my %t = map { $_->{name} => $_ } @{ feed(\&Plugins::ListeningHistory::Browse::_albums, {}) };
+    ok('by album: named by the album alone, no artist, no count', exists $t{'Mix LP'} && exists $t{'Local LP'});
+    is('by album: the artist underneath', $t{'Mix LP'}{line2}, 'M');
+    is('by album: the badge of the LATEST play, not the older one', $t{'Mix LP'}{extid}, 'qobuz:album:mx9');
+    ok('CONTROL: a library album has no badge', !exists $t{'Local LP'}{extid});
+    ok('by album: a station is not an album tile', !exists $t{'Jazz FM'});
+    ok('by album: still drills into that album\'s plays', ref $t{'Mix LP'}{url} eq 'CODE');
+    Plugins::ListeningHistory::DB::remove($_) for $old, $new;
 }
 
 # --- album resolution ----------------------------------------------------------------------------------
@@ -148,18 +166,6 @@ like_('by player: one row per player with a count', $players->[0]{name}, qr/^Kit
     $TestClock::OFFSET = $save;
 }
 POSIX::tzset();
-
-# --- every row carries the full date and time, today included -------------------------------------
-{
-    my $t = POSIX::mktime(0, 32, 14, 18, 8, 126);          # 18 Sep 2026 14:32 local
-    my $row = Plugins::ListeningHistory::Browse::entryRow(undef,
-        { id => 1, kind => 'track', source => 'qobuz', title => 'T', played_at => $t });
-    like_('row: full date and time, no weekday', $row->{line2}, qr/(?:^|\x{00b7} )18 Sep 2026, 14:32$/);
-    my $today = Plugins::ListeningHistory::Browse::entryRow(undef,
-        { id => 2, kind => 'track', source => 'qobuz', title => 'T', played_at => time() });
-    my $y = (localtime)[5] + 1900;
-    like_('row: TODAY shows its date too, not just a time', $today->{line2}, qr/ $y, \d\d:\d\d$/);
-}
 
 # --- the sort row ----------------------------------------------------------------------------------
 {

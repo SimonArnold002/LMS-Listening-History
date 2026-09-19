@@ -44,14 +44,12 @@ use warnings;
     $INC{'Slim/Utils/Prefs.pm'} = __FILE__;
 }
 
-# cstring() returns the token, so a test asserting on a label sees 'PLUGIN_LH_TRACKS'.
-# A token holding a %s gets its arguments appended, so sprintf still says something.
+# cstring() returns the token, so a test asserting on a label sees 'PLUGIN_LH_RECENT'.
+# A token holding a %s maps to a format here, so sprintf still says something.
 {
     package Slim::Utils::Strings;
     require Exporter; our @ISA = ('Exporter'); our @EXPORT_OK = ('cstring', 'string');
-    my %FMT = (PLUGIN_LH_TRACKS_OF => '%s of %s tracks', PLUGIN_LH_TRACKS => '%s tracks',
-               PLUGIN_LH_FROM => 'from %s', PLUGIN_LH_TRUNCATED => 'latest %s',
-               PLUGIN_LH_SORTED_BY => 'Sorted by %s');
+    my %FMT = (PLUGIN_LH_TRUNCATED => 'latest %s', PLUGIN_LH_SORTED_BY => 'Sorted by %s');
     sub cstring { return $FMT{ $_[1] // '' } // $_[1] // '' }
     sub string  { return $_[0] // '' }
     $INC{'Slim/Utils/Strings.pm'} = __FILE__;

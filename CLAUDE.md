@@ -26,7 +26,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | album vs track rule, `Tracker::_record`, promote on 2nd track | **DECIDED by Simon 2026-09-18**: 2+ back-to-back tracks = album | `2+ TRACKS = AN ALBUM` |
 | `played_threshold` 90%, 60s fallback | **DECIDED by Simon 2026-09-18**: Listen Later's rule | `THE 90% RULE` |
 | radio recorded as a station row | **DECIDED by Simon 2026-09-18** | `RADIO IS A STATION ROW` |
-| row date `Browse::_when`, By service menu, sort row `_sortRow`/`sortEntries`, date search `parseDateSearch` | **DECIDED by Simon 2026-09-18** (0.1.3) | `DATES, SERVICE MENU, SORT` |
+| By service menu, sort row `_sortRow`/`sortEntries`, date search `parseDateSearch` | **DECIDED by Simon 2026-09-18** (0.1.3) | `DATES, SERVICE MENU, SORT` |
 | home shelf title `PLUGIN_LH`, not "Recently played" | **DECIDED by Simon 2026-09-18**: avoids confusion with Material's own Recently Played | `SHELF TITLE` |
 | `Sources::albumKey` name fallback, `primaryArtist` | deliberate: first credit only | `THE NAME KEY USES THE FIRST CREDIT` |
 | Bandcamp album replay = recorded tracks | deliberate, no album page url at play time | `BANDCAMP REPLAYS WHAT WAS HEARD` |
@@ -34,6 +34,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | `ORDER BY … id DESC` tie-break untestable | known; index gives the same order | `THE TIE-BREAK CANNOT BE PINNED` |
 | `LIST_CAP` 1000 per browse list | deliberate, and says so on the list | `LIST_CAP` |
 | service badge `Sources::extid` / row `extid`; NO service name in `entryRow` line2 | **DECIDED by Simon 2026-09-18** (1.0.1) | `THE SERVICE IS A BADGE` |
+| `entryRow` text: Album (or Title) over Artist, no count / player / time on the row; `_when`, `PLUGIN_LH_TRACKS_OF`, `PLUGIN_LH_FROM` removed | **DECIDED by Simon 2026-09-19** | `A ROW READS LIKE A RELEASE` |
 | back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
 | app/shelf logo `ListeningHistoryIcon` = Google `music_history`, not Material's `history` glyph | **KEPT by Simon 2026-09-18** | `THE LOGO STAYS` |
 | "More by this artist" context entry | DROPPED at build; By artist covers it | `MORE BY THIS ARTIST` |
@@ -58,8 +59,8 @@ can be DISPROVEN. Closing a round is not a suppression.
 
 - **2+ TRACKS = AN ALBUM — Simon, 2026-09-18.** `Tracker::_record` promotes a track entry to kind
   `album` on the SECOND track from the same `album_key`, heard back to back on one player. Not a
-  percentage of the album. The row says "N of M tracks" when the total is known (library: live
-  count), "N tracks" otherwise. Offered alternatives (a % threshold; "queue matches the album")
+  percentage of the album. (The row used to say "N of M tracks"; since 2026-09-19 it shows only
+  Album over Artist — see `A ROW READS LIKE A RELEASE`. The counts are still stored.) Offered alternatives (a % threshold; "queue matches the album")
   were declined.
 - **THE 90% RULE — Simon, 2026-09-18.** A track counts at `played_threshold`% (default 90) of its
   duration, or `FALLBACK_SECS` (60) with no duration, re-checked against `songElapsedSeconds`, and
@@ -74,8 +75,8 @@ can be DISPROVEN. Closing a round is not a suppression.
   called that would be confused with it. The app menu's "Recently played" tile is inside the
   plugin and keeps its name.
 - **DATES, SERVICE MENU, SORT — Simon, 2026-09-18 (0.1.3).**
-  - Every row's line2 ends with the full date and time, `18 Sep 2026, 14:32`, today included.
-    There is NO day of the week (asked for). `Browse::_when`.
+  - ~~Every row's line2 ends with the full date and time~~ — SUPERSEDED 2026-09-19: the row shows no
+    time at all (`A ROW READS LIKE A RELEASE`); `_when` is gone. The sort row still orders by date.
   - Filter by service is a separate **By service** menu (`_services`/`_service`,
     `DB::services`/`forSource`), NOT a filter row. Simon chose it over an options row and over a
     sort-only design.
@@ -111,7 +112,7 @@ can be DISPROVEN. Closing a round is not a suppression.
   It stays so the order is guaranteed by the query, not by the planner.
 - **`LIST_CAP`** (1000) bounds every browse list. A capped list ends with a text row saying so and
   pointing at By date. The home shelf and Recently played are 50, fixed (Simon's spec).
-- **THE SERVICE IS A BADGE — Simon, 2026-09-18 (1.0.1).** `Browse::entryRow`
+- **THE SERVICE IS A BADGE — Simon, 2026-09-18 (1.0.1). VERIFIED LIVE 2026-09-18 on a Material 6.4.9.1 build made from upstream `master` at `d3f1d9227`.** `Browse::entryRow`
   no longer writes the service name (`sourceLabel`) into line2, and that includes "Library". Every
   row with a service carries `extid` (`Sources::extid`), and Material draws its service badge on the
   artwork from the part before the first `:`, looked up in `emblems.json`.
@@ -126,6 +127,23 @@ can be DISPROVEN. Closing a round is not a suppression.
     library lists.
   - Accepted consequence: on a Material without `d3f1d9227`, and on the web skins, a row no longer
     shows its service at all. By service still groups by it.
+- **A ROW READS LIKE A RELEASE — Simon, 2026-09-19.** `Browse::entryRow` gives Material the same two
+  lines as any release elsewhere in LMS: the album (a track: its title; a station: its name) on top, the
+  artist underneath, and nothing of our own. *"we dont need to have our own variant here"* — asked for the
+  grid thumbnails, and the extra line was dropped entirely rather than kept as a tail.
+  - Gone from the row: `Artist – ` in the name, the ♫/♪ glyphs, "N of M tracks" / "from <album>", the
+    player and the date/time (`_join`, `_when`, `SEP`, `GLYPH_*`, and six unused strings removed). The
+    data is still stored and the sort row still orders by date, artist or album.
+  - A station has no second line; a row with no artist likewise.
+  - **The By album tiles too** (`_albums`, found from Simon's screenshot the same day): the album over the
+    artist, no `– Artist (n)` label, and `extid` from the group's MOST RECENT entry (`DB::albums` now returns
+    `last_id`; a group can mix sources, and the latest play is the one badged). A library album stays
+    unbadged. `DASH` removed. By artist / By player / By service tiles are not releases and keep their
+    `Name (n)` labels.
+  - `extid` (the badge), `image`, the play fields and the "…" menu are unchanged.
+  Guard: `tools/t_browse.pl` (album/track line2 is EXACTLY the artist; a station has none; the service row's
+  line2 is the artist alone; By album: album/artist, latest play's badge, library control), anti-tested
+  (a tail on line2: 3 red; "Artist – Album" name: red; oldest play badged: 1 red; tile badge dropped: 1 red).
 - **NO BACK-FILL FROM LMS — declined by Simon, 2026-09-18.** An import from LMS's persistent DB
   was offered: `tracks_persistent` holds only ONE `lastplayed` + a `playcount` per LIBRARY track
   (no player, no earlier plays, almost certainly no streaming or radio), so it could only rebuild a
@@ -141,16 +159,14 @@ can be DISPROVEN. Closing a round is not a suppression.
 
 ### B. KNOWN-OPEN AND ACCEPTED
 
-- **UNVERIFIED LIVE (2026-09-18).** 0.1.0 is installed on plex:9000 and Simon reports it working
-  in general use. These specific paths have not been checked individually and are covered by
+- **UNVERIFIED LIVE (2026-09-18).** Installed on plex:9000 since 0.1.0 (1.0.2 built 2026-09-19) and Simon
+  reports it working in general use; the service badge is verified live (§A2). These specific paths have not been checked individually and are covered by
   the suites only:
   - `Sources::isStation` — any remote non-service url with no duration is a station. Not checked
     against TuneIn, Radio Paradise, BBC Sounds.
   - Station naming from `$track->title`.
   - `_albumNode` for Tidal, Deezer and Spotty (Qobuz is exercised with a stub only).
   - That `newsong` fires on radio title changes with the same url (assumed, and guarded either way).
-  - The `extid` service badge: it needs a Material release containing upstream `d3f1d9227`. That
-    commit is not released as of 2026-09-18 (upstream install.xml says `DEVELOPMENT`).
   - Material rendering of the tiles (`_MTL_icon_` names checked against MaterialIcons.ttf: all
     present), the home shelf, and the search row.
 
@@ -239,7 +255,7 @@ V=1 perl tools/t_tracker.pl
 |---|---|
 | `t_tracker.pl` | the grouping rules end to end through the real callback + timers: one track, album promotion, A/B/A, stop, same url, gap, two players, skip, pause, Qobuz id grouping, first-credit grouping, Spotty error text, radio once per session (+ the deadline), a web track with no length at start is not timed as radio (skip at 61s of 300 not recorded), removed-mid-album |
 | `t_db.pl` | schema stamp + re-open, promote in one transaction, no orphan play on a missing entry, literal `%`/`_` search, indexes, forDay injection, remove/purge cascade, a failed COMMIT reported as failure by addToEntry/remove/purge |
-| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, full date+time on every row (today too), the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), context menu + remove, unticked checkbox stores 0 |
+| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, rows read Album/Title over Artist and nothing else (a station has no second line), By album tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), context menu + remove, unticked checkbox stores 0 |
 | `t_load.pl` | every module loads; every `Plugins::ListeningHistory::X::y` call is defined |
 
 Version history: `docs/VERSION-HISTORY.md`.

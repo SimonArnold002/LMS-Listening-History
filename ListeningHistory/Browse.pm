@@ -43,10 +43,6 @@ my %SORT_LABEL = (date => 'PLUGIN_LH_SORT_DATE', artist => 'PLUGIN_LH_SORT_ARTIS
 # The home shelf and the Recently played list both show this many entries.
 use constant SHELF_SIZE => 50;
 
-use constant SEP          => " \x{00b7} ";   # " · "
-use constant DASH         => " \x{2013} ";   # " – "
-use constant GLYPH_ALBUM  => "\x{266b}";     # ♫  more than one track
-use constant GLYPH_TRACK  => "\x{266a}";     # ♪  one track
 
 my $log   = logger('plugin.listeninghistory');
 my $prefs = preferences('plugin.listeninghistory');
@@ -349,12 +345,18 @@ sub _artist {
     _entryList($client, $cb, Plugins::ListeningHistory::DB::forArtist($pt->{artist}));
 }
 
+# A By album tile reads like any release in LMS — the album over the artist, no count — and
+# wears the service badge of its most recent play (Simon, 2026-09-19).
 sub _albums {
     my ($client, $cb) = @_;
     my @items = map {
-        my $label = $_->{album} . (length $_->{artist} ? DASH . $_->{artist} : '') . " ($_->{n})";
-        _link($client, \$label, $_->{artwork} || I_ALBUM, \&_album,
-            { album => $_->{album}, artist => $_->{artist} })
+        my $item = _link($client, \$_->{album}, $_->{artwork} || I_ALBUM, \&_album,
+            { album => $_->{album}, artist => $_->{artist} });
+        $item->{line2} = $_->{artist} if length $_->{artist};
+        my $last  = Plugins::ListeningHistory::DB::get($_->{last_id});
+        my $extid = $last ? Plugins::ListeningHistory::Sources::extid($last) : undef;
+        $item->{extid} = $extid if defined $extid;
+        $item
     } @{ Plugins::ListeningHistory::DB::albums() };
     return _entryList($client, $cb, []) unless @items;
     $cb->({ items => \@items });
@@ -412,39 +414,29 @@ sub entryRow {
     my ($client, $e) = @_;
     my $kind = $e->{kind} // 'track';
 
-    my @sub;
+    # The same two lines as a release anywhere else in LMS: the album (or the track, or the
+    # station) on top and the artist underneath, nothing of our own (Simon, 2026-09-19). The
+    # count, the player and the time are not shown on the row; the sort row still orders by
+    # them. The service is Material's badge on the artwork, from extid.
     my ($name, %play);
-
     if ($kind eq 'album') {
-        $name = _join($e->{artist}, $e->{album} // cstring($client, 'PLUGIN_LH_UNKNOWN_ALBUM'));
-        my $n = $e->{tracks_played} || 0;
-        push @sub, GLYPH_ALBUM . ' ' . ($e->{track_total}
-            ? sprintf(cstring($client, 'PLUGIN_LH_TRACKS_OF'), $n, $e->{track_total})
-            : sprintf(cstring($client, 'PLUGIN_LH_TRACKS'), $n));
+        $name = $e->{album} // cstring($client, 'PLUGIN_LH_UNKNOWN_ALBUM');
         %play = (type => 'playlist', url => \&_entryTracks, passthrough => [{ id => $e->{id} }]);
     }
     elsif ($kind eq 'station') {
         $name = $e->{title} // $e->{url};
-        push @sub, cstring($client, 'PLUGIN_LH_TYPE_STATION');
         %play = (type => 'audio', url => $e->{url});
     }
     else {
-        $name = _join($e->{artist}, $e->{title} // cstring($client, 'PLUGIN_LH_UNKNOWN_TITLE'));
-        push @sub, GLYPH_TRACK . ' ' . (defined $e->{album} && length $e->{album}
-            ? sprintf(cstring($client, 'PLUGIN_LH_FROM'), $e->{album})
-            : cstring($client, 'PLUGIN_LH_TYPE_TRACK'));
+        $name = $e->{title} // cstring($client, 'PLUGIN_LH_UNKNOWN_TITLE');
         %play = (type => 'audio', url => $e->{url});
     }
-
-    # No service name in line2 (Simon, 2026-09-18): the service is Material's badge on the
-    # artwork, from extid. Library rows carry none, as in Material's own library lists.
-    push @sub, $e->{player_name} if defined $e->{player_name} && length $e->{player_name};
-    push @sub, _when($e->{played_at});
-    my $extid = Plugins::ListeningHistory::Sources::extid($e);
+    my $artist = $kind eq 'station' ? undef : $e->{artist};
+    my $extid  = Plugins::ListeningHistory::Sources::extid($e);
 
     return {
         name        => $name,
-        line2       => join(SEP, @sub),
+        (defined $artist && length $artist ? (line2 => $artist) : ()),
         image       => $e->{artwork} || ICON,
         (defined $extid ? (extid => $extid) : ()),
         %play,
@@ -455,19 +447,6 @@ sub entryRow {
             },
         },
     };
-}
-
-sub _join {
-    my ($artist, $what) = @_;
-    return (defined $artist && length $artist) ? $artist . DASH . $what : $what;
-}
-
-# Always the full date and time, "18 Sep 2026, 14:32" — today included, no day of the week
-# (Simon, 2026-09-18).
-sub _when {
-    my ($t) = @_;
-    return '' unless $t;
-    return POSIX::strftime('%e %b %Y, %H:%M', localtime($t)) =~ s/^\s+//r;
 }
 
 # Drill-in and play of an album row: the whole album where the library or the service can

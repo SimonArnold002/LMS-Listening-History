@@ -376,12 +376,20 @@ sub artists {
                     GROUP BY artist COLLATE NOCASE ORDER BY artist COLLATE NOCASE});
 }
 
+# `last_id` is the group's most recent entry, which the By album tile takes its service
+# badge from (a group can mix sources; the latest play is the one shown).
 sub albums {
-    return _index(q{SELECT MIN(album) AS album, MIN(COALESCE(artist, '')) AS artist,
-                           MAX(artwork) AS artwork, COUNT(*) AS n FROM entries
-                    WHERE album IS NOT NULL AND album <> '' AND kind <> 'station'
-                    GROUP BY album COLLATE NOCASE, COALESCE(artist, '') COLLATE NOCASE
-                    ORDER BY album COLLATE NOCASE, artist COLLATE NOCASE});
+    return _index(q{SELECT g.*,
+                           (SELECT x.id FROM entries x
+                            WHERE x.album = g.album COLLATE NOCASE
+                              AND COALESCE(x.artist, '') = g.artist COLLATE NOCASE
+                              AND x.kind <> 'station'
+                            ORDER BY x.played_at DESC, x.id DESC LIMIT 1) AS last_id
+                    FROM (SELECT MIN(album) AS album, MIN(COALESCE(artist, '')) AS artist,
+                                 MAX(artwork) AS artwork, COUNT(*) AS n FROM entries
+                          WHERE album IS NOT NULL AND album <> '' AND kind <> 'station'
+                          GROUP BY album COLLATE NOCASE, COALESCE(artist, '') COLLATE NOCASE) g
+                    ORDER BY g.album COLLATE NOCASE, g.artist COLLATE NOCASE});
 }
 
 sub services {
