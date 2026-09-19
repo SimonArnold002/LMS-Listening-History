@@ -161,7 +161,7 @@ $res = feed(\&Plugins::ListeningHistory::Browse::topLevel, { params => { search 
 is('search with no match says so', $res->[0]{name}, 'PLUGIN_LH_NO_RESULTS');
 
 # --- by date / artist / player menus ---------------------------------------------------------------------
-my $months = feed(\&Plugins::ListeningHistory::Browse::_months, {});
+my $months = feed(\&Plugins::ListeningHistory::Browse::_dates, {});
 is('by date: Today first', $months->[0]{name}, 'PLUGIN_LH_TODAY');
 my $today = feed($months->[0]{url}, {}, $months->[0]{passthrough}[0]);
 ok('by date: Today lists today\'s entries', scalar(grep { ($_->{name} // '') eq 'Jazz FM' } @$today));
@@ -178,7 +178,7 @@ like_('by player: one row per player with a count', $players->[0]{name}, qr/^Kit
     my $save = $TestClock::OFFSET;
     $TestClock::OFFSET = 0;
     TestClock::advance($when - time());
-    my $m = feed(\&Plugins::ListeningHistory::Browse::_months, {});
+    my $m = feed(\&Plugins::ListeningHistory::Browse::_dates, {});
     is('Yesterday across the clock change is the 29th', $m->[1]{passthrough}[0]{ymd}, '2026-03-29');
     is('Today is the 30th', $m->[0]{passthrough}[0]{ymd}, '2026-03-30');
     $TestClock::OFFSET = $save;
@@ -283,6 +283,61 @@ POSIX::tzset();
     is('a date with nothing on it says so',
        feed(\&Plugins::ListeningHistory::Browse::topLevel, { params => { search => '01/01/2020' } })->[0]{name},
        'PLUGIN_LH_NO_RESULTS');
+}
+
+# --- year search and By date years -------------------------------------------------------------
+{
+    my $Y = \&Plugins::ListeningHistory::Browse::parseYearSearch;
+    my $jan = sub { POSIX::mktime(0, 0, 0, 1, 0, $_[0] - 1900) };
+    my $yr = sub { join '..', map { defined $_ ? $_ : 'none' } $Y->($_[0]) };
+    is("year search: $_->[0]", $yr->($_->[0]), $_->[1]) for
+        ['2025',          join('..', $jan->(2025), $jan->(2026), '2025')],
+        [' 2025 ',        join('..', $jan->(2025), $jan->(2026), '2025')],
+        ['2024 - 2025',   join('..', $jan->(2024), $jan->(2026), "2024\x{2013}2025")],
+        ['2025 to 2024',  join('..', $jan->(2024), $jan->(2026), "2024\x{2013}2025")];
+    is("not a year: $_", $yr->($_), '') for '1234', '20255', '2025x', 'The 1975', '2024 - 2025 - 2026', '', '18/09/2026';
+
+    Plugins::ListeningHistory::DB::dbh()->do($_) for 'DELETE FROM plays', 'DELETE FROM entries';
+    my $mid = sub { POSIX::mktime(0, 0, 12, $_[2], $_[1] - 1, $_[0] - 1900) };
+    add(title => 'NYE',   url => 'file:///nye',  played_at => $mid->(2024, 12, 31));
+    add(title => 'Jan',   url => 'file:///jan',  played_at => POSIX::mktime(0, 0, 0, 1, 0, 125));
+    add(title => 'Mar',   url => 'file:///mar',  played_at => $mid->(2025, 3, 10));
+    add(title => 'Dec',   url => 'file:///dec',  played_at => POSIX::mktime(59, 59, 23, 31, 11, 125));
+    add(title => 'Named', artist => 'The 2025 Band', url => 'file:///named', played_at => $mid->(2026, 5, 1));
+    my $audio = sub { join ',', sort map { $_->{url} } grep { ($_->{type} // '') eq 'audio' } @{ $_[0] } };
+    my $top = sub { feed(\&Plugins::ListeningHistory::Browse::topLevel, { params => { search => $_[0] } }) };
+
+    my $res = $top->('2025');
+    is('year search: the first row opens the year, with its count', $res->[0]{name}, 'Played in 2025 (3)');
+    is('year search: the text matches follow it', $audio->($res), 'file:///named');
+    is('year search: opening the row lists the whole year, both ends, nothing outside',
+       $audio->(feed($res->[0]{url}, {}, $res->[0]{passthrough}[0])), 'file:///dec,file:///jan,file:///mar');
+    $res = $top->('2024 - 2025');
+    is('year range: one row covering both years', $res->[0]{name}, "Played in 2024\x{2013}2025 (4)");
+    $res = $top->('2019');
+    is('a year with nothing played and no text match says so', $res->[0]{name}, 'PLUGIN_LH_NO_RESULTS');
+    is('and only that', scalar @$res, 1);
+    $res = $top->('2026');
+    is('CONTROL: a year with entries but no text match is just the year row', scalar @$res, 1);
+    add(title => '2026 Song', url => 'file:///t2026', played_at => $mid->(2023, 1, 1));
+    $res = $top->('2026');
+    is('a number that is a name still finds the name', $audio->($res), 'file:///t2026');
+    is('CONTROL: a plain text search adds no year row',
+       scalar(grep { ($_->{name} // '') =~ /^Played in/ } @{ $top->('Named') }), 0);
+
+    my $dates = feed(\&Plugins::ListeningHistory::Browse::_dates, {});
+    is('by date: Today, Yesterday, then one row per year, newest first',
+       join('|', map { $_->{name} } @$dates[2 .. $#$dates]), '2026 (1)|2025 (3)|2024 (1)|2023 (1)');
+    my ($y25) = grep { $_->{name} eq '2025 (3)' } @$dates;
+    my $in = feed($y25->{url}, {}, $y25->{passthrough}[0]);
+    is('a year opens All of the year, then its months newest first',
+       join('|', map { $_->{name} } @$in), 'All of 2025 (3)|December 2025 (1)|March 2025 (1)|January 2025 (1)');
+    is('All of the year lists that year only', $audio->(feed($in->[0]{url}, {}, $in->[0]{passthrough}[0])),
+       'file:///dec,file:///jan,file:///mar');
+    my $days = feed($in->[2]{url}, {}, $in->[2]{passthrough}[0]);
+    like_('a month still opens its days', $days->[0]{name}, qr/10 March \(1\)$/);
+    is('a year with nothing in it says so',
+       feed(\&Plugins::ListeningHistory::Browse::_months, {}, { y => '1999' })->[0]{name}, 'PLUGIN_LH_EMPTY');
 }
 
 # --- context menu + remove --------------------------------------------------------------------------------

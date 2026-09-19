@@ -49,7 +49,8 @@ use warnings;
 {
     package Slim::Utils::Strings;
     require Exporter; our @ISA = ('Exporter'); our @EXPORT_OK = ('cstring', 'string');
-    my %FMT = (PLUGIN_LH_TRUNCATED => 'latest %s', PLUGIN_LH_SORTED_BY => 'Sorted by %s');
+    my %FMT = (PLUGIN_LH_TRUNCATED => 'latest %s', PLUGIN_LH_SORTED_BY => 'Sorted by %s',
+                PLUGIN_LH_PLAYED_IN => 'Played in %s', PLUGIN_LH_ALL_OF => 'All of %s');
     sub cstring { return $FMT{ $_[1] // '' } // $_[1] // '' }
     sub string  { return $_[0] // '' }
     $INC{'Slim/Utils/Strings.pm'} = __FILE__;

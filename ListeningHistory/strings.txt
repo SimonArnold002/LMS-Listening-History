@@ -112,3 +112,8 @@ PLUGIN_LH_SORT_ALBUM
 PLUGIN_LH_WEB_BACK
 	EN	Updated — back to the list
 
+PLUGIN_LH_PLAYED_IN
+	EN	Played in %s
+
+PLUGIN_LH_ALL_OF
+	EN	All of %s
