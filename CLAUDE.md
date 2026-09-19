@@ -166,8 +166,9 @@ can be DISPROVEN. Closing a round is not a suppression.
 
 ### B. KNOWN-OPEN AND ACCEPTED
 
-- **UNVERIFIED LIVE (2026-09-18).** Installed on plex:9000 since 0.1.0 (1.0.2 built 2026-09-19) and Simon
-  reports it working in general use; the service badge is verified live (§A2). These specific paths have not been checked individually and are covered by
+- **UNVERIFIED LIVE (2026-09-18).** Installed on plex:9000 since 0.1.0 and Simon
+  reports it working in general use; the service badge is verified live (§A2). 1.0.3 (web-skin artist fix)
+  built 2026-09-19, not yet installed. These specific paths have not been checked individually and are covered by
   the suites only:
   - `Sources::isStation` — any remote non-service url with no duration is a station. Not checked
     against TuneIn, Radio Paradise, BBC Sounds.
