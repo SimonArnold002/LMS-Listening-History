@@ -3,6 +3,14 @@
 User-facing release notes, written at each merge to `main`. Per-build engineering notes live in
 `docs/VERSION-HISTORY.md`.
 
+## 1.0.5 — 2026-09-19
+
+Search your history by year, and browse it year by year.
+
+### Improvements
+- **Search by year.** Type a year, like `2025`, or a range of years, like `2024 - 2025`. The first result is *Played in 2025*, which opens everything played that year. Your ordinary text matches follow below it, so an album or artist with a year in its name, like *1989* or *The 1975*, still turns up.
+- **By date now starts with years.** Under Today and Yesterday there's one row per year, with its count. A year opens *All of 2025*, then its months, and a month opens its days as before.
+
 ## 1.0.4 — 2026-09-19
 
 First release. A history of everything you play, on every player, from your library, streaming services and internet radio. A played album is one entry, and every entry plays again.

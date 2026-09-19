@@ -116,7 +116,7 @@
   <h1>Listening History — LMS Plugin</h1>
   <p class="tagline">A plugin for <strong>Lyrion Music Server (LMS)</strong> that keeps a full history of what you've played, on <strong>every player</strong>, from your <strong>local library</strong> and from <strong>streaming services</strong> (Qobuz, Tidal, Deezer, Spotify and others), plus internet radio. Play a whole album and it's logged as <strong>one album</strong>, not a dozen separate tracks. Play one track and it's logged as that track. Every entry plays again with one tap, streaming ones included.</p>
   <div class="badges">
-    <span class="badge accent">v1.0.4</span>
+    <span class="badge accent">v1.0.5</span>
     <span class="badge">LMS 9.0.0+</span>
     <span class="badge">Material Skin</span>
     <span class="badge">Library + Streaming + Radio</span>
@@ -137,7 +137,7 @@
 <div class="card"><h4>Looks like LMS</h4><p>An album reads album over artist, a single track reads like an LMS favourite, and streaming entries carry the service's badge on the artwork</p><span class="needs">Needs: Badge: a Material Skin newer than 6.4.9</span></div>
 <div class="card"><h4>Plays again</h4><p>Tap an entry to play it: a whole album, the single track, or the radio station</p><span class="needs">Needs: The service's own plugin</span></div>
 <div class="card"><h4>Material home shelf</h4><p>A <em>Listening History</em> row of your latest 50 entries on the home screen</p><span class="needs">Needs: Material Skin</span></div>
-<div class="card"><h4>Look further back</h4><p>Browse by date, artist, album, service or player, or search by text, a date or a date range</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Look further back</h4><p>Browse by date, artist, album, service or player, or search by text, a date, a year or a range of either</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Sort any list</h4><p>Newest first, artist A–Z or album A–Z</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Radio too</h4><p>A station is logged once per listening session</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Its own database</h4><p>Nothing is lost when the server restarts, and you choose how long to keep it</p><span class="needs">Needs: nothing</span></div>
@@ -178,8 +178,8 @@
 </tr></thead>
 <tbody>
 <tr><td><strong>Recently played</strong></td><td>Your latest 50 entries, the same as the home shelf</td></tr>
-<tr><td><strong>Search history</strong></td><td>Anything whose artist, album, track title or player name matches, including tracks played inside an album. Type a <strong>date</strong> or a <strong>date range</strong> to see what was played then (see below)</td></tr>
-<tr><td><strong>By date</strong></td><td>Today, Yesterday, then month → day</td></tr>
+<tr><td><strong>Search history</strong></td><td>Anything whose artist, album, track title or player name matches, including tracks played inside an album. Type a <strong>date</strong>, a <strong>year</strong> or a range of either to see what was played then (see below)</td></tr>
+<tr><td><strong>By date</strong></td><td>Today, Yesterday, then each year → <em>All of</em> the year, or a month → day</td></tr>
 <tr><td><strong>By artist</strong></td><td>Every artist you've played, with a count</td></tr>
 <tr><td><strong>By album</strong></td><td>Every album you've played from, with the service badge of its latest play</td></tr>
 <tr><td><strong>By service</strong></td><td>Library, Qobuz, Spotify, Radio and so on, each with its own history</td></tr>
@@ -193,12 +193,13 @@
 </li>
 <li><strong>Radio</strong>: the station's name.
 </li></ul>
-<p>On the Material Skin, an entry from a streaming service carries that service's badge on its artwork; library entries have none, as in Material's own library lists. The badge needs a Material Skin newer than 6.4.9. Which player an entry played on and when aren't shown on the row: use <strong>By player</strong>, <strong>By date</strong> or a date search.</p>
+<p>On the Material Skin, an entry from a streaming service carries that service's badge on its artwork; library entries have none, as in Material's own library lists. The badge needs a Material Skin newer than 6.4.9. Which player an entry played on and when aren't shown on the row: use <strong>By player</strong>, <strong>By date</strong> or a date or year search.</p>
 <p>Every list starts with a <strong>Sorted by</strong> row: tap it to switch between <em>date</em> (newest first), <em>artist A–Z</em> and <em>album A–Z</em>. The choice is remembered. The home shelf always shows the newest first.</p>
-<h3>Searching by date</h3>
+<h3>Searching by date or year</h3>
 <p>Dates are <strong>day first</strong>. Any of these find everything played on 18 September 2026:</p>
 <p><code>18/09/2026</code> · <code>18-09-2026</code> · <code>18.09.2026</code> · <code>18/9/26</code> · <code>2026-09-18</code> · <code>18 Sep 2026</code> · <code>18 September 2026</code></p>
 <p>For a <strong>range</strong>, put two dates either side of <code> - </code> or <code> to </code>. For example, <code>01/09/2026 - 15/09/2026</code> lists everything from the 1st to the 15th, both days included. A date that doesn't exist, like <code>31/02/2026</code>, is searched as ordinary text.</p>
+<p>Type a <strong>year</strong>, like <code>2025</code>, or a range of years, like <code>2024 - 2025</code>, and the first result is <strong>Played in 2025</strong>, which opens everything played that year. Below it are the ordinary text matches, so an album or artist with a year in its name, like <em>1989</em> or <em>The 1975</em>, still turns up.</p>
 <h3>Playing an entry</h3>
 <ul>
 <li><strong>Album</strong>: plays the whole album. If the library or service can't provide the full album (Deezer and some others don't identify albums during playback), it plays the tracks you actually heard, in the order you heard them.
