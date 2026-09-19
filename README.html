@@ -116,7 +116,7 @@
   <h1>Listening History — LMS Plugin</h1>
   <p class="tagline">A plugin for <strong>Lyrion Music Server (LMS)</strong> that keeps a full history of what you've played, on <strong>every player</strong>, from your <strong>local library</strong> and from <strong>streaming services</strong> (Qobuz, Tidal, Deezer, Spotify and others), plus internet radio. Play a whole album and it's logged as <strong>one album</strong>, not a dozen separate tracks. Play one track and it's logged as that track. Every entry plays again with one tap, streaming ones included.</p>
   <div class="badges">
-    <span class="badge accent">v0.1.3</span>
+    <span class="badge accent">v1.0.4</span>
     <span class="badge">LMS 9.0.0+</span>
     <span class="badge">Material Skin</span>
     <span class="badge">Library + Streaming + Radio</span>
@@ -131,9 +131,10 @@
 <section id="features-at-a-glance">
 <h2>Features at a glance</h2>
 <div class="feature-cards">
-<div class="card"><h4>Albums stay albums</h4><p>Two or more tracks of the same album played back to back become one entry, e.g. "5 of 12 tracks"</p><span class="needs">Needs: nothing</span></div>
-<div class="card"><h4>Every player</h4><p>Every player on the server is recorded, and each entry shows which one it played on</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Albums stay albums</h4><p>Two or more tracks of the same album played back to back become one entry</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Every player</h4><p>Every player on the server is recorded; browse by player to see what played where</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Library and streaming</h4><p>Local files and any streaming service, in one history</p><span class="needs">Needs: The service's own plugin</span></div>
+<div class="card"><h4>Looks like LMS</h4><p>An album reads album over artist, a single track reads like an LMS favourite, and streaming entries carry the service's badge on the artwork</p><span class="needs">Needs: Badge: a Material Skin newer than 6.4.9</span></div>
 <div class="card"><h4>Plays again</h4><p>Tap an entry to play it: a whole album, the single track, or the radio station</p><span class="needs">Needs: The service's own plugin</span></div>
 <div class="card"><h4>Material home shelf</h4><p>A <em>Listening History</em> row of your latest 50 entries on the home screen</p><span class="needs">Needs: Material Skin</span></div>
 <div class="card"><h4>Look further back</h4><p>Browse by date, artist, album, service or player, or search by text, a date or a date range</p><span class="needs">Needs: nothing</span></div>
@@ -153,7 +154,7 @@
 <section id="installation">
 <h2>Installation</h2>
 <p>Add this repository URL under <strong>Settings → Plugins → Additional repositories</strong>:</p>
-<pre><code>https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/dev/repo.xml</code></pre>
+<pre><code>https://simonarnold002.github.io/LMS-Listening-History/repo.xml</code></pre>
 <p>Then install <strong>Listening History</strong> from the plugin list and restart the server.</p>
 </section>
 <section id="using-it">
@@ -180,11 +181,19 @@
 <tr><td><strong>Search history</strong></td><td>Anything whose artist, album, track title or player name matches, including tracks played inside an album. Type a <strong>date</strong> or a <strong>date range</strong> to see what was played then (see below)</td></tr>
 <tr><td><strong>By date</strong></td><td>Today, Yesterday, then month → day</td></tr>
 <tr><td><strong>By artist</strong></td><td>Every artist you've played, with a count</td></tr>
-<tr><td><strong>By album</strong></td><td>Every album you've played from, with a count</td></tr>
+<tr><td><strong>By album</strong></td><td>Every album you've played from, with the service badge of its latest play</td></tr>
 <tr><td><strong>By service</strong></td><td>Library, Qobuz, Spotify, Radio and so on, each with its own history</td></tr>
 <tr><td><strong>By player</strong></td><td>Each player, with its history</td></tr>
 </tbody></table>
-<p>Each row shows <strong>what</strong> was played (♫ for an album, with how many of its tracks you heard; ♪ for a track, with the album it's from), <strong>where it came from</strong>, <strong>which player</strong>, and <strong>when</strong>, as a full date and time, e.g. <em>18 Sep 2026, 14:32</em>.</p>
+<p>Rows read the way LMS shows any release:</p>
+<ul>
+<li><strong>Album</strong>: the album, with the artist underneath. The Default and Classic web skins show it on one line, <em>Album by Artist</em>.
+</li>
+<li><strong>Track</strong>: one line, the way LMS names a favourite track, e.g. <em>Live By You by Actress from Radical Frame</em>.
+</li>
+<li><strong>Radio</strong>: the station's name.
+</li></ul>
+<p>On the Material Skin, an entry from a streaming service carries that service's badge on its artwork; library entries have none, as in Material's own library lists. The badge needs a Material Skin newer than 6.4.9. Which player an entry played on and when aren't shown on the row: use <strong>By player</strong>, <strong>By date</strong> or a date search.</p>
 <p>Every list starts with a <strong>Sorted by</strong> row: tap it to switch between <em>date</em> (newest first), <em>artist A–Z</em> and <em>album A–Z</em>. The choice is remembered. The home shelf always shows the newest first.</p>
 <h3>Searching by date</h3>
 <p>Dates are <strong>day first</strong>. Any of these find everything played on 18 September 2026:</p>

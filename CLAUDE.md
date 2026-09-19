@@ -9,6 +9,15 @@ streaming included. Material home shelf of the latest 50 entries; app menu to lo
 artist, album, service, player, or search by text, date or date range; every list sortable. Stores its own SQLite DB. Targets LMS 9.x, Material
 Skin preferred. Built 2026-09-18 from Simon's brief, in the shape of Listen Later / LBF / PFR.
 
+## Branches and releasing
+- **1.0.4 is the first release**: merged to `main` and tagged `v1.0.4` on 2026-09-19.
+- Work happens on `dev`. `dev` mirrors `main` except for ONE line, the `repo.xml` `<url>`:
+  - main: `https://simonarnold002.github.io/LMS-Listening-History/ListeningHistory.zip` (Pages)
+  - dev: `https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/dev/ListeningHistory.zip`
+  - Reconcile that line on every merge; never blind-merge it. `<sha>`, `<icon>` and `<link>` are the same on both.
+- At a merge to `main`: ONE `CHANGELOG.md` entry for the version released, covering everything since the
+  last `main` commit; regenerate `README.html` / `index.html`; tag `v<version>` on the main merge commit.
+
 ## Review Ledger — READ THIS BEFORE REPORTING ANY FINDING
 
 The workspace `CLAUDE.md` one level up holds the three fleet-wide gates. This ledger holds what
@@ -52,8 +61,7 @@ date and who decided. Add a row to the index in the same edit. State the reason 
 can be DISPROVEN. Closing a round is not a suppression.
 
 ### A. NOT FINDINGS — deliberate, fleet-wide
-- Stale zip / `repo.xml <sha>` on `dev`: recomputed at build time with the version bump. The sha
-  is EMPTY until the first build.
+- Stale zip / `repo.xml <sha>` on `dev`: recomputed at build time with the version bump.
 - `CHANGELOG.md` / `README` are written at the MERGE TO MAIN.
 - Uncommitted = under review; unpushed = review not passed. Never prompt to commit or push.
 
@@ -179,7 +187,7 @@ can be DISPROVEN. Closing a round is not a suppression.
 
 - **UNVERIFIED LIVE (2026-09-18).** Installed on plex:9000 since 0.1.0 and Simon
   reports it working in general use; the service badge is verified live (§A2). 1.0.4 (single-track naming)
-  built 2026-09-19, not yet installed. These specific paths have not been checked individually and are covered by
+  built 2026-09-19 and RELEASED to `main` (`v1.0.4`), not yet installed on the rig. These specific paths have not been checked individually and are covered by
   the suites only:
   - `Sources::isStation` — any remote non-service url with no duration is a station. Not checked
     against TuneIn, Radio Paradise, BBC Sounds.
