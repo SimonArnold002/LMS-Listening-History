@@ -1,0 +1,114 @@
+PLUGIN_LH
+	EN	Listening History
+
+PLUGIN_LH_DESC
+	EN	A play history across every player, for library and streaming music. A played album is one entry, a lone track is a track entry, and every entry plays again.
+
+PLUGIN_LH_RECENT
+	EN	Recently played
+
+PLUGIN_LH_SEARCH
+	EN	Search history
+
+PLUGIN_LH_BY_DATE
+	EN	By date
+
+PLUGIN_LH_BY_ARTIST
+	EN	By artist
+
+PLUGIN_LH_BY_ALBUM
+	EN	By album
+
+PLUGIN_LH_BY_PLAYER
+	EN	By player
+
+PLUGIN_LH_SETTINGS
+	EN	Settings
+
+PLUGIN_LH_TODAY
+	EN	Today
+
+PLUGIN_LH_YESTERDAY
+	EN	Yesterday
+
+PLUGIN_LH_EMPTY
+	EN	Nothing played yet
+
+PLUGIN_LH_NO_RESULTS
+	EN	No matches in your history
+
+PLUGIN_LH_TRUNCATED
+	EN	Showing the latest %s. Use By date to look further back.
+
+PLUGIN_LH_UNKNOWN_ARTIST
+	EN	Unknown artist
+
+PLUGIN_LH_UNKNOWN_ALBUM
+	EN	Unknown album
+
+PLUGIN_LH_UNKNOWN_TITLE
+	EN	Unknown title
+
+PLUGIN_LH_REMOVE
+	EN	Remove from history
+
+PLUGIN_LH_NO_MATCH
+	EN	This album could not be found on its service
+
+PLUGIN_LH_SECTION_RECORDING
+	EN	Recording
+
+PLUGIN_LH_THRESHOLD
+	EN	Track counts as played at
+
+PLUGIN_LH_THRESHOLD_DESC
+	EN	How much of a track has to play before it is recorded, as a percentage of its length. A track that reports no length is recorded after 60 seconds.
+
+PLUGIN_LH_GAP
+	EN	Album session gap
+
+PLUGIN_LH_GAP_DESC
+	EN	Two tracks from the same album played back to back become one album entry. If more than this many minutes pass between them, the second starts a new entry.
+
+PLUGIN_LH_RADIO
+	EN	Record internet radio
+
+PLUGIN_LH_RADIO_DESC
+	EN	Record a radio station once per listening session, as an entry that plays the station again.
+
+PLUGIN_LH_SECTION_STORAGE
+	EN	Storage
+
+PLUGIN_LH_RETENTION
+	EN	Keep history for
+
+PLUGIN_LH_RETENTION_DESC
+	EN	Entries older than this are removed once a day. 0 keeps everything.
+
+PLUGIN_LH_DAYS
+	EN	days (0 = forever)
+
+PLUGIN_LH_MINUTES
+	EN	minutes
+
+PLUGIN_LH_ENABLED
+	EN	Enabled
+
+PLUGIN_LH_BY_SERVICE
+	EN	By service
+
+PLUGIN_LH_SORTED_BY
+	EN	Sorted by %s (tap to change)
+
+PLUGIN_LH_SORT_DATE
+	EN	date
+
+PLUGIN_LH_SORT_ARTIST
+	EN	artist A–Z
+
+PLUGIN_LH_SORT_ALBUM
+	EN	album A–Z
+
+PLUGIN_LH_WEB_BACK
+	EN	Updated — back to the list
+
