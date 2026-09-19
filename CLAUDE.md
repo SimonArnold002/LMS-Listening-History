@@ -34,7 +34,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | `ORDER BY … id DESC` tie-break untestable | known; index gives the same order | `THE TIE-BREAK CANNOT BE PINNED` |
 | `LIST_CAP` 1000 per browse list | deliberate, and says so on the list | `LIST_CAP` |
 | service badge `Sources::extid` / row `extid`; NO service name in `entryRow` line2 | **DECIDED by Simon 2026-09-18** (1.0.1) | `THE SERVICE IS A BADGE` |
-| `entryRow` text: Album (or Title) over Artist, no count / player / time on the row; `_when`, `PLUGIN_LH_TRACKS_OF`, `PLUGIN_LH_FROM` removed | **DECIDED by Simon 2026-09-19** | `A ROW READS LIKE A RELEASE` |
+| `entryRow` text: Album over Artist (a track: one line "Title by Artist from Album", 1.0.4), no count / player / time on the row; `_when`, `PLUGIN_LH_TRACKS_OF`, `PLUGIN_LH_FROM` removed | **DECIDED by Simon 2026-09-19** | `A ROW READS LIKE A RELEASE` |
 | `_titled`: web-skin `name` = "Album by Artist", Material gets `line1` over `line2` | **DECIDED by Simon 2026-09-19** (1.0.2 review) | `THE WEB SKINS KEEP THE ARTIST IN THE NAME` |
 | `_trackName`: a single-track row is ONE line "Title by Artist from Album", as LMS names a favourite track | **DECIDED by Simon 2026-09-19** | `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE` |
 | back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
@@ -130,8 +130,9 @@ can be DISPROVEN. Closing a round is not a suppression.
   - Accepted consequence: on a Material without `d3f1d9227`, and on the web skins, a row no longer
     shows its service at all. By service still groups by it.
 - **A ROW READS LIKE A RELEASE — Simon, 2026-09-19.** `Browse::entryRow` gives Material the same two
-  lines as any release elsewhere in LMS: the album (a track: its title; a station: its name) on top, the
-  artist underneath, and nothing of our own. *"we dont need to have our own variant here"* — asked for the
+  lines as any release elsewhere in LMS: the album (a station: its name) on top, the artist underneath,
+  and nothing of our own. A track row is one line since 1.0.4 — see `A SINGLE TRACK IS NAMED LIKE LMS
+  NAMES ONE` below. *"we dont need to have our own variant here"* — asked for the
   grid thumbnails, and the extra line was dropped entirely rather than kept as a tail.
   - Gone from the row: `Artist – ` in the name, the ♫/♪ glyphs, "N of M tracks" / "from <album>", the
     player and the date/time (`_join`, `_when`, `SEP`, `GLYPH_*`, and six unused strings removed). The
@@ -158,8 +159,8 @@ can be DISPROVEN. Closing a round is not a suppression.
     unbadged. `DASH` removed. By artist / By player / By service tiles are not releases and keep their
     `Name (n)` labels.
   - `extid` (the badge), `image`, the play fields and the "…" menu are unchanged.
-  Guard: `tools/t_browse.pl` (album/track line2 is EXACTLY the artist; a station has none; the service row's
-  line2 is the artist alone; By album: album/artist, latest play's badge, library control), anti-tested
+  Guard: `tools/t_browse.pl` (album line2 is EXACTLY the artist; a track and a station have none; a service track's
+  name carries no service, player or time; By album: album/artist, latest play's badge, library control), anti-tested
   (a tail on line2: 3 red; "Artist – Album" name: red; oldest play badged: 1 red; tile badge dropped: 1 red).
 - **NO BACK-FILL FROM LMS — declined by Simon, 2026-09-18.** An import from LMS's persistent DB
   was offered: `tracks_persistent` holds only ONE `lastplayed` + a `playcount` per LIBRARY track
@@ -281,7 +282,7 @@ V=1 perl tools/t_tracker.pl
 |---|---|
 | `t_tracker.pl` | the grouping rules end to end through the real callback + timers: one track, album promotion, A/B/A, stop, same url, gap, two players, skip, pause, Qobuz id grouping, first-credit grouping, Spotty error text, radio once per session (+ the deadline), a web track with no length at start is not timed as radio (skip at 61s of 300 not recorded), removed-mid-album |
 | `t_db.pl` | schema stamp + re-open, promote in one transaction, no orphan play on a missing entry, literal `%`/`_` search, indexes, forDay injection, remove/purge cascade, a failed COMMIT reported as failure by addToEntry/remove/purge |
-| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, rows read Album/Title over Artist and nothing else (a station has no second line), By album tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), context menu + remove, unticked checkbox stores 0 |
+| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is one line "Title by Artist from Album" (each clause dropped alone; no second line), a station has no second line, By album tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), context menu + remove, unticked checkbox stores 0 |
 | `t_load.pl` | every module loads; every `Plugins::ListeningHistory::X::y` call is defined |
 
 Version history: `docs/VERSION-HISTORY.md`.
