@@ -116,7 +116,7 @@
   <h1>Listening History — LMS Plugin</h1>
   <p class="tagline">A plugin for <strong>Lyrion Music Server (LMS)</strong> that keeps a full history of what you've played, on <strong>every player</strong>, from your <strong>local library</strong> and from <strong>streaming services</strong> (Qobuz, Tidal, Deezer, Spotify and others), plus internet radio. Play a whole album and it's logged as <strong>one album</strong>, not a dozen separate tracks. Play one track and it's logged as that track. Every entry plays again with one tap, streaming ones included.</p>
   <div class="badges">
-    <span class="badge accent">v1.0.5</span>
+    <span class="badge accent">v1.0.7</span>
     <span class="badge">LMS 9.0.0+</span>
     <span class="badge">Material Skin</span>
     <span class="badge">Library + Streaming + Radio</span>
@@ -131,13 +131,13 @@
 <section id="features-at-a-glance">
 <h2>Features at a glance</h2>
 <div class="feature-cards">
-<div class="card"><h4>Albums stay albums</h4><p>Two or more tracks of the same album played back to back become one entry</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Albums stay albums</h4><p>Two or more tracks of the same release played back to back become one entry, whether it's an album, an EP or a single</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Every player</h4><p>Every player on the server is recorded; browse by player to see what played where</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Library and streaming</h4><p>Local files and any streaming service, in one history</p><span class="needs">Needs: The service's own plugin</span></div>
 <div class="card"><h4>Looks like LMS</h4><p>An album reads album over artist, a single track reads like an LMS favourite, and streaming entries carry the service's badge on the artwork</p><span class="needs">Needs: Badge: a Material Skin newer than 6.4.9</span></div>
 <div class="card"><h4>Plays again</h4><p>Tap an entry to play it: a whole album, the single track, or the radio station</p><span class="needs">Needs: The service's own plugin</span></div>
 <div class="card"><h4>Material home shelf</h4><p>A <em>Listening History</em> row of your latest 50 entries on the home screen</p><span class="needs">Needs: Material Skin</span></div>
-<div class="card"><h4>Look further back</h4><p>Browse by date, artist, album, service or player, or search by text, a date, a year or a range of either</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Look further back</h4><p>Browse by date, artist, release, service or player, or search by text, a date, a year or a range of either</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Sort any list</h4><p>Newest first, artist A–Z or album A–Z</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Radio too</h4><p>A station is logged once per listening session</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Its own database</h4><p>Nothing is lost when the server restarts, and you choose how long to keep it</p><span class="needs">Needs: nothing</span></div>
@@ -181,7 +181,7 @@
 <tr><td><strong>Search history</strong></td><td>Anything whose artist, album, track title or player name matches, including tracks played inside an album. Type a <strong>date</strong>, a <strong>year</strong> or a range of either to see what was played then (see below)</td></tr>
 <tr><td><strong>By date</strong></td><td>Today, Yesterday, then each year → <em>All of</em> the year, or a month → day</td></tr>
 <tr><td><strong>By artist</strong></td><td>Every artist you've played, with a count</td></tr>
-<tr><td><strong>By album</strong></td><td>Every album you've played from, with the service badge of its latest play</td></tr>
+<tr><td><strong>By release</strong></td><td>Your releases split by type, the way LMS does: <em>Albums</em>, <em>EPs</em>, <em>Singles</em>, <em>Compilations</em>. Each opens its releases, with the service badge of the latest play. Library releases use the type from your tags; Qobuz states its own. Releases from other services are listed as albums</td></tr>
 <tr><td><strong>By service</strong></td><td>Library, Qobuz, Spotify, Radio and so on, each with its own history</td></tr>
 <tr><td><strong>By player</strong></td><td>Each player, with its history</td></tr>
 </tbody></table>
