@@ -308,7 +308,7 @@ sub get {
 
 sub recent    { return _entries(undef, [], $_[0]) }
 sub forArtist { return _entries('artist = ? COLLATE NOCASE', [$_[0]]) }
-sub forPlayer { return _entries('player_id = ?', [$_[0]]) }
+sub forPlayer { return _entries('player_id = ?', [$_[0]], $_[1]) }
 # One source, or an arrayref of several (By service merges sources that share a label).
 sub forSource {
     my @src = grep { defined } (ref $_[0] eq 'ARRAY' ? @{ $_[0] } : $_[0]);

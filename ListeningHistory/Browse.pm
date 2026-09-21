@@ -485,9 +485,9 @@ sub entryRow {
     my $kind = $e->{kind} // 'track';
 
     # Named the way LMS names the same thing elsewhere, nothing of our own (Simon, 2026-09-19):
-    # an album row is the album over the artist, like any release; a single track is ONE line,
-    # "Title by Artist from Album", exactly as LMS names a favourite track; a station is its
-    # name. The count, the player and the time are not shown; the sort row still orders by
+    # an album row is the album over the artist, like any release; a single track is "Title from
+    # Album" over the artist (Simon, 2026-09-21), and "Title by Artist from Album" on the web skins,
+    # as LMS names a favourite track; a station is its name. The count, the player and the time are not shown; the sort row still orders by
     # them. The service is Material's badge on the artwork, from extid.
     my ($name, %play);
     if ($kind eq 'album') {
@@ -507,7 +507,7 @@ sub entryRow {
     return {
         ($kind eq 'album'   ? _titled($client, $name, $e->{artist})
        : $kind eq 'station' ? (name => $name)
-       :                      (name => _trackName($client, $name, $e->{artist}, $e->{album}))),
+       :                      _trackName($client, $name, $e->{artist}, $e->{album})),
         image       => $e->{artwork} || ICON,
         (defined $extid ? (extid => $extid) : ()),
         %play,
@@ -532,16 +532,20 @@ sub _titled {
             line1 => $what, line2 => $artist);
 }
 
-# A single track, named the way LMS names one: "Live By You by Actress from Radical Frame"
-# (a Qobuz track saved to Favourites reads exactly that). Core strings BY and FROM, so it is
-# translated as LMS's own is. One line, no line1/line2, so Material and the web skins show the
-# same text. A missing artist or album just drops its clause.
+# A single track. The web skins draw `name` alone: "Live By You by Actress from Radical Frame", as
+# LMS names a favourite track (a Qobuz track saved to Favourites reads exactly that). Material gets
+# "Live By You from Radical Frame" over "Actress", the artist on the second line where an album row
+# has it (Simon, 2026-09-21: the one long line was cut off before the artist). Core strings BY and
+# FROM, so it is translated as LMS's own is. A missing artist or album drops its clause; with no
+# artist there is no second line, and the name alone.
 sub _trackName {
     my ($client, $title, $artist, $album) = @_;
-    my $n = $title;
-    $n .= ' ' . cstring($client, 'BY') . ' ' . $artist   if defined $artist && length $artist;
-    $n .= ' ' . cstring($client, 'FROM') . ' ' . $album  if defined $album  && length $album;
-    return $n;
+    my $top = $title;
+    $top .= ' ' . cstring($client, 'FROM') . ' ' . $album if defined $album && length $album;
+    return (name => $top) unless defined $artist && length $artist;
+    my $n = $title . ' ' . cstring($client, 'BY') . ' ' . $artist;
+    $n .= ' ' . cstring($client, 'FROM') . ' ' . $album if defined $album && length $album;
+    return (name => $n, line1 => $top, line2 => $artist);
 }
 
 # Drill-in and play of an album row: the whole album where the library or the service can

@@ -32,7 +32,7 @@ add(title => "Song $_", artist => 'A', url => "file:///$_", played_at => $now) f
 my $shelf = feed(\&Plugins::ListeningHistory::Browse::homeShelf, {});
 is('shelf: exactly 50 of 60', scalar @$shelf, 50);
 is('shelf: flat — no header or text rows', scalar(grep { ($_->{type} // '') =~ /header|text/ } @$shelf), 0);
-is('shelf: newest first even when played_at ties', shown($shelf->[0]), "Song 60 BY A");
+is('shelf: newest first even when played_at ties', shown($shelf->[0]), "Song 60");
 my $again = feed(\&Plugins::ListeningHistory::Browse::homeShelf, {});
 is('shelf: the same order on every request', join('|', map { shown($_) } @$again), join('|', map { shown($_) } @$shelf));
 my @ex = @Plugins::MaterialSkin::HomeExtraBase::INIT;
@@ -62,11 +62,13 @@ is('album row: the artist underneath, and only the artist', $albumRow->{line2}, 
 is('album row: the web-skin name keeps the artist', $albumRow->{name}, 'Local LP BY Lib');
 is('station row: the name alone, no "by"', $row{'Jazz FM'}{name}, 'Jazz FM');
 is('album row: has the "…" menu', $albumRow->{itemActions}{info}{command}[1], 'contextmenu');
-# A single track is named the way LMS names one (a favourite track reads "Live By You by Actress
-# from Radical Frame"): ONE line, core strings BY and FROM, the same on Material and the web skins.
-my $solo = $row{'Solo BY Lib FROM Local LP'};
-is('track row: "Title by Artist from Album", one line', $solo->{name}, 'Solo BY Lib FROM Local LP');
-ok('track row: no line1/line2 (no second line anywhere)', !exists $solo->{line1} && !exists $solo->{line2});
+# A single track: the web skins get it named the way LMS names one (a favourite track reads "Live By
+# You by Actress from Radical Frame"); Material gets "Title from Album" over the artist, the artist
+# on the second line as on an album row (Simon, 2026-09-21).
+my $solo = $row{'Solo FROM Local LP'};
+is('track row: the web-skin name is "Title by Artist from Album"', $solo->{name}, 'Solo BY Lib FROM Local LP');
+is('track row: Material\'s top line is "Title from Album"', $solo->{line1}, 'Solo FROM Local LP');
+is('track row: the artist underneath, and only the artist', $solo->{line2}, 'Lib');
 is('track row: type audio', $solo->{type}, 'audio');
 is('track row: plays its url', $solo->{url}, 'file:///a/3');
 is('station row: type audio', $row{'Jazz FM'}{type}, 'audio');
@@ -93,9 +95,12 @@ ok('station row: no second line (a station has no artist)', !exists $row{'Jazz F
     is('album row with no id: bare prefix', $R->({ kind => 'album', source => 'deezer', url => 'deezer://1.mp3' })->{extid}, 'deezer:');
     my $qt = $R->({ source => 'qobuz', url => 'qobuz://1.flac', title => 'T', artist => 'Q Artist', player_name => 'Kitchen' });
     is('track name: no service, no player, no time', $qt->{name}, 'T BY Q Artist');
+    is('track line2: the artist, no service, player or time', $qt->{line2}, 'Q Artist');
     is('track with no album: the "from" clause is dropped', $qt->{name}, 'T BY Q Artist');
-    is('track with no artist: the "by" clause is dropped',
-       $R->({ source => 'qobuz', url => 'qobuz://3.flac', title => 'T', album => 'LP' })->{name}, 'T FROM LP');
+    is('track with no album: the top line is the title alone', $qt->{line1}, 'T');
+    my $na = $R->({ source => 'qobuz', url => 'qobuz://3.flac', title => 'T', album => 'LP' });
+    is('track with no artist: the "by" clause is dropped', $na->{name}, 'T FROM LP');
+    ok('track with no artist: no second line', !exists $na->{line1} && !exists $na->{line2});
     my $bare = $R->({ source => 'qobuz', url => 'qobuz://2.flac', title => 'Bare' });
     ok('no artist or album: the title alone, no second line', $bare->{name} eq 'Bare' && !exists $bare->{line2} && !exists $bare->{line1});
     my $alb = $R->({ kind => 'album', source => 'qobuz', url => 'qobuz://4.flac', album => 'LP', artist => 'Q Artist' });

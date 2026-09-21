@@ -13,7 +13,7 @@ Tested on LMS 9.x with the **Material Skin**.
 | **Albums stay albums** | Two or more tracks of the same release played back to back become one entry, whether it's an album, an EP or a single | Nothing |
 | **Every player** | Every player on the server is recorded; browse by player to see what played where | Nothing |
 | **Library and streaming** | Local files and any streaming service, in one history | The service's own plugin |
-| **Looks like LMS** | An album reads album over artist, a single track reads like an LMS favourite, and streaming entries carry the service's badge on the artwork | Badge: a Material Skin newer than 6.4.9 |
+| **Looks like LMS** | An album reads album over artist, a single track reads track and album over artist, and streaming entries carry the service's badge on the artwork | Badge: a Material Skin newer than 6.4.9 |
 | **Plays again** | Tap an entry to play it: a whole album, the single track, or the radio station | The service's own plugin |
 | **Material home shelf** | A *Listening History* row of your latest 50 entries on the home screen | Material Skin |
 | **Look further back** | Browse by date, artist, release, service or player, or search by text, a date, a year or a range of either | Nothing |
@@ -49,6 +49,7 @@ Then install **Listening History** from the plugin list and restart the server.
 - **A track counts once 90% of it has played.** A track that reports no length counts after 60 seconds. Skip a track before then and it isn't recorded; pause it and the count simply waits. Podcast episodes and other web tracks follow the same rule, even when their length only becomes known after they start.
 - **Back-to-back tracks from one album become one album entry.** The first track appears as a track; as soon as a second track from the same album plays, the entry turns into an album and its count goes up with every further track.
 - **A new album, a stop, or a cleared queue starts a new entry.** So does a gap longer than 30 minutes between two tracks.
+- **A server restart doesn't split anything.** If an album carries on after the server restarts, it stays one entry, and a track already counted isn't counted again.
 - **Radio** is recorded once per listening session, named after the station, 60 seconds after it starts. Song-title changes within the stream don't add entries.
 
 ### Browsing
@@ -68,7 +69,7 @@ Open **My Apps → Listening History**:
 Rows read the way LMS shows any release:
 
 - **Album**: the album, with the artist underneath. The Default and Classic web skins show it on one line, *Album by Artist*.
-- **Track**: one line, the way LMS names a favourite track, e.g. *Live By You by Actress from Radical Frame*.
+- **Track**: the track and its album, with the artist underneath, e.g. *Live By You from Radical Frame* over *Actress*. The Default and Classic web skins show it on one line, the way LMS names a favourite track: *Live By You by Actress from Radical Frame*.
 - **Radio**: the station's name.
 
 On the Material Skin, an entry from a streaming service carries that service's badge on its artwork; library entries have none, as in Material's own library lists. The badge needs a Material Skin newer than 6.4.9. Which player an entry played on and when aren't shown on the row: use **By player**, **By date** or a date or year search.

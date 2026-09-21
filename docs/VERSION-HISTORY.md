@@ -182,3 +182,60 @@ round's two fixes (CLAUDE.md §C):
   EP. `Sources::_normType` maps EPMINI → EP on every read (`%TYPE_ALIAS`), which also fixes the entry
   already stored. Tests 317 → 318; the tracker's fake Qobuz now answers with Qobuz's real spellings.
 - Zip sha `775fcef641e9940638d1f1313b9cd70e4ccebf67`.
+
+## 1.0.8 – 1.0.9 — 2026-09-21 (dev, `5bc5376`) — a server restart is not a new listen
+
+- Reported by Simon: after a server restart, resuming from Now Playing logged the play twice. `%session` /
+  `%pending` were memory only, so the resumed album became a second entry and a track counted before the
+  restart could be counted again.
+- `Tracker::_restore`: the FIRST `newsong` per player after `init` (`%restored`) rebuilds that player's
+  session from its last entry (`DB::forPlayer($cid, 1)`, which now takes a limit) when it ended within
+  `session_gap_min`, with `resumed_url` = the last play's url. `_record` drops the first counted play if it is
+  that url. A stop or clear seen before that first `newsong` does not cancel the restore (what LMS sends around a
+  restart is unmeasured; the gap decides).
+- 1.0.9 (first review): dropping the resumed track also sets `last_at` to now, or a long track heard again after
+  the restart split the album on the gap.
+- Tests: `t_tracker` 70 → 86 (the restart block; 10 red on the old Tracker, controls green).
+- Zip sha (1.0.9) `28345d2eba5cc73f12606783f517072a6f0a6d03`. 1.0.8 was built and superseded before install.
+
+## 1.0.10 — 2026-09-21 (dev, `fa43460`) — superseded
+
+- Second review: a track resumed part way through ended before a full-length mark and was never recorded.
+  1.0.10 armed the mark for `target - $client->songElapsedSeconds`. This was a NO-OP: LMS counts
+  `songElapsedSeconds` from the start of the STREAM, and the test passed only because the stub counted from the
+  start of the track. Replaced in 1.0.11.
+- Zip sha `7fd1d4544b10810eb9cae410f9ac153af65bb9b4`.
+
+## 1.0.11 — 2026-09-21 (dev, `b720356`) — a local track resumed after a restart is recorded
+
+- On the first `newsong` per player after startup only, the song's `startOffset` (the resume point) comes off
+  the 90% target. `_markTick` stays stream-relative, so everywhere else a seek must still be listened through
+  (a seek also fires `newsong`).
+- The tracker stub now models LMS: `songElapsedSeconds` per stream, `startOffset` on the song.
+- LMS 9.1 source facts behind it are in CLAUDE.md `A RESTART IS NOT A NEW LISTEN`.
+- VERIFIED LIVE on HQPlayer (ManCave), local FLAC: the album carried on across a restart as one entry. The
+  `startOffset` path was not exercised live (the track restarted from the top on that player).
+- Tests: `t_tracker` 86 → 92 (local resume at 80%, red on 1.0.10; seek-to-95% control; streaming restart
+  from the top).
+- Zip sha `7460a39f45b4f4e892d7b0ac71016ad8115e6674`.
+
+## 1.0.12 — 2026-09-21 (dev, `af195e6`) — service titles; a track row shows its artist
+
+- Live: three Qobuz rows read "Pylon by beabadoobee from Pylon by beabadoobee from Pylon". LMS stores the name
+  of the row a track was started from as its title, and our own track rows (and LMS favourites) are named
+  "Title by Artist from Album". `Sources::describe` now takes the handler's title first for a remote track.
+  The three bad rows were removed by hand; a repair migration was offered and declined.
+- Simon: a single-track row on Material is now "Title from Album" over the artist (`Browse::_trackName` gives
+  `line1` / `line2`); the web skins keep "Title by Artist from Album" in `name`.
+- Tests: `t_tracker` 92 → 95, `t_browse` 150 → 154 (8 red on the one-line row).
+- Zip sha `c63ea6b2e4382c9f4c31b4da9653c959f64efc2d`.
+
+## 1.0.13 – 1.0.14 — 2026-09-21 (dev, `0053471`) — a plain web track keeps its own title and artist
+
+- 1.0.13 (review of 1.0.12): a plain `http(s)` track keeps `$track->title` first again. LMS's own HTTP handler
+  builds its title from the row name and splits exactly one " - " into artist and title, so "Episode 12 - The
+  Big One" was being recorded as "The Big One". Every plugin handler still comes first.
+- 1.0.14: the same split also stored the front half as the ARTIST (older than 1.0.12). `Sources::_isSplit` drops
+  the handler's artist when its artist and title rejoin to the track's own title; a real stream artist is kept.
+- Tests: `t_tracker` 95 → 98. Totals 323 (start of 2026-09-21) → 355 (t_browse 154, t_db 57, t_load 46, t_tracker 98).
+- Zip sha `29fd895040cdcb5c83264fef54dcc9fa4a7cf5d5`. CHANGELOG / README wait for the merge to `main`.

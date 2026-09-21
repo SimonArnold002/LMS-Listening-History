@@ -11,7 +11,8 @@ Skin preferred. Built 2026-09-18 from Simon's brief, in the shape of Listen Late
 
 ## Branches and releasing
 - **1.0.4 is the first release**: merged to `main` and tagged `v1.0.4` on 2026-09-19. **1.0.5** (year search,
-  By date years) released and tagged `v1.0.5` the same day.
+  By date years) released and tagged `v1.0.5` the same day. **1.0.7** (By release by type, Qobuz `epmini`)
+  released and tagged `v1.0.7` the same day.
 - Work happens on `dev`. `dev` mirrors `main` except for ONE line, the `repo.xml` `<url>`:
   - main: `https://simonarnold002.github.io/LMS-Listening-History/ListeningHistory.zip` (Pages)
   - dev: `https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/dev/ListeningHistory.zip`
@@ -48,7 +49,10 @@ grep -n "_record\|album_key" CLAUDE.md
 | service badge `Sources::extid` / row `extid`; NO service name in `entryRow` line2 | **DECIDED by Simon 2026-09-18** (1.0.1) | `THE SERVICE IS A BADGE` |
 | `entryRow` text: Album over Artist (a track: one line "Title by Artist from Album", 1.0.4), no count / player / time on the row; `_when`, `PLUGIN_LH_TRACKS_OF`, `PLUGIN_LH_FROM` removed | **DECIDED by Simon 2026-09-19** | `A ROW READS LIKE A RELEASE` |
 | `_titled`: web-skin `name` = "Album by Artist", Material gets `line1` over `line2` | **DECIDED by Simon 2026-09-19** (1.0.2 review) | `THE WEB SKINS KEEP THE ARTIST IN THE NAME` |
-| `_trackName`: a single-track row is ONE line "Title by Artist from Album", as LMS names a favourite track | **DECIDED by Simon 2026-09-19** | `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE` |
+| `_trackName`: a single-track row: web skins "Title by Artist from Album" (as LMS names a favourite track); Material "Title from Album" over the artist | **DECIDED by Simon 2026-09-19, CHANGED by Simon 2026-09-21** (artist to line 2) | `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE` |
+| restart carry-on `Tracker::_restore`, `resumed_url`: first newsong per player after startup rebuilds the session from its last entry (within `session_gap_min`); the first counted play is dropped if it is the last play's url | **ASKED FOR by Simon 2026-09-21**; carry-on VERIFIED LIVE 1.0.11, offset path unexercised | `A RESTART IS NOT A NEW LISTEN` |
+| service track title `Sources::describe`: handler `$meta->{title}` BEFORE `$track->title`, except a plain web track (`http`/`https`: LMS's HTTP handler splits the row name); radio names from `$track->title` | **FIXED 2026-09-21**, asked for by Simon | `THE SERVICE NAMES ITS TRACK` |
+| `Sources::_isSplit` lexical `$a` (shadows `sort`'s) | **DECLINED by Simon 2026-09-21**: harmless, rename only in passing | `§C` round 2026-09-21 #6 |
 | back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
 | app/shelf logo `ListeningHistoryIcon` = Google `music_history`, not Material's `history` glyph | **KEPT by Simon 2026-09-18** | `THE LOGO STAYS` |
 | "More by this artist" context entry | DROPPED at build; By artist covers it | `MORE BY THIS ARTIST` |
@@ -212,6 +216,12 @@ can be DISPROVEN. Closing a round is not a suppression.
     album over artist (`_titled`); stations stay their name.
     Guard: `t_browse.pl` (the full form, no line1/line2, each clause dropped alone, album-row control);
     anti-tested (no FROM clause: 4 red; track put back on `_titled`: 5 red).
+    **CHANGED by Simon 2026-09-21:** *"for single played tracks is it possible that the artist can show where it
+    does for albums?"* then *"keep the track from album on top row, artist on 2nd"*. The one long line was cut off
+    before the artist on Material. Now `name` stays "Title by Artist from Album" (web skins), plus `line1` =
+    "Title from Album" and `line2` = the artist. With no artist there's no line1/line2, just the name. Offered and
+    NOT chosen: the album on line 2 as well ("Artist · Album", the kind of tail removed on 2026-09-19).
+    Guard: `t_browse.pl` track-row block (8 red on the one-line version).
   - **THE WEB SKINS KEEP THE ARTIST IN THE NAME (`_titled`) — Simon, 2026-09-19, from the 1.0.2 review.**
     Default / Classic draw `name` only (never line2), so a bare title there lost the artist. A release row
     now carries `name` = "Album by Artist" (core string `BY`, as LMS's own web lists word it) plus `line1`
@@ -227,6 +237,63 @@ can be DISPROVEN. Closing a round is not a suppression.
   Guard: `tools/t_browse.pl` (album line2 is EXACTLY the artist; a track and a station have none; a service track's
   name carries no service, player or time; By album: album/artist, latest play's badge, library control), anti-tested
   (a tail on line2: 3 red; "Artist – Album" name: red; oldest play badged: 1 red; tile badge dropped: 1 red).
+- **A RESTART IS NOT A NEW LISTEN — asked for by Simon, 2026-09-21.** Reported: after a server restart,
+  resuming from Now Playing logged the play twice. Cause: `%session` / `%pending` are memory only, so
+  the resumed album became a second entry and a track counted before the restart was counted again.
+  Fix: `Tracker::_restore` runs on the FIRST newsong per player after `init` (`%restored`), reads
+  `DB::forPlayer($cid, 1)` and, if it ended within `session_gap_min`, rebuilds the session (urls from
+  its plays) with `resumed_url` = the last play's url. `_record` drops the first counted play if it is
+  that url, then forgets it, so a deliberate replay afterwards still counts. Dropping it also sets
+  `last_at` to now (review 2026-09-21: without it a long track resumed after a restart split the album
+  again, the gap measured from the count BEFORE the restart; guard: "restart in a long track", 2 red without it).
+  1.0.10 (second review) armed the mark for `target - $client->songElapsedSeconds`: a NO-OP, and its test
+  passed only because the stub counted elapsed from the start of the TRACK. 1.0.11 (third review, 2026-09-21)
+  replaces it: on the FIRST newsong per player after startup only, `$song->startOffset` (the resume point)
+  comes off the target; `_markTick` stays stream-relative, so a seek must still be listened through.
+  Simon, 2026-09-21: streaming titles restart FROM THE TOP after a restart (the `resumed_url` drop covers
+  those); LOCAL files resume where they stopped (the startOffset path). Guards: "resumed at 80%" (2 red on
+  1.0.10 with the corrected stub), "CONTROL seek to 95%", "streaming restart from the top".
+  VERIFIED FROM LMS 9.1 SOURCE (read, not measured live), do not re-derive:
+  - `Squeezebox2::songElapsedSeconds` counts from the start of the current STREAM. The track position is
+    `StreamingController::playingSongElapsed` (= `Slim::Player::Source::songTime`), which adds `startOffset`.
+  - A seek fires `newsong`: `_JumpToTime` stops and re-streams, the player's track-started event runs
+    `_Playing`, which notifies `playlist newsong`.
+  - LMS's own auto-resume on reconnect (`Player::resumeOnPower`, powerOnResume …PlayOn + playingAtPowerOff)
+    is `playlist jump <index> … {timeOffset => positionAtDisconnect}`, i.e. a resume at an offset.
+  - A local file started at an offset DOES set `$song->startOffset`, on both paths: a transcoder seek
+    (`Song::open`, `$transcoder->{start} = $self->startOffset(timeOffset)`) and a direct byte seek
+    (`Protocols::File`, `$song->startOffset($seekdata->{timeOffset})`). A cue-sheet track's position in its
+    file is `$song->offset`, a separate field, so a cue track started normally reads startOffset 0.
+    (Fourth review, 2026-09-21: checked and cleared.)
+  VERIFIED LIVE 2026-09-21 on 1.0.11, HQPlayer (ManCave), local FLAC, *It Goes On*: track 1 recorded as a
+  track entry; paused 9s into track 2, server restarted, resumed from Now Playing: the queue survived (2 of
+  11), track 2 restarted FROM THE TOP, counted at 2:36 and JOINED the entry (now one album entry, no
+  separate track 2 entry). NOT exercised live: the startOffset path. On this player a local track restarted
+  from the top too, so "local resumes where it stopped" is unconfirmed here (maybe real players or
+  LMS's auto-resume on reconnect only). A stop/clear seen before
+  the first newsong does NOT cancel the restore: what LMS sends around a restart is unmeasured, and
+  the gap decides. Known limit, accepted: restart, then within 30 min deliberately play the track
+  that was last recorded = not counted. Guard: `tools/t_tracker.pl` "restart" block (10 red on the
+  old Tracker; the gap and other-player controls stay green). UNVERIFIED LIVE: whether a resume fires
+  `newsong` and at what offset. The suite covers both an offset and a restart from the top.
+- **THE SERVICE NAMES ITS TRACK — fixed 2026-09-21, asked for by Simon.** Live: three Qobuz rows read
+  "Pylon by beabadoobee from Pylon by beabadoobee from Pylon". Writer: LMS stores the name of the row a
+  track was started from as its title (`Commands.pm` playlist play: `Slim::Music::Info::setTitle($url,
+  $title)`, LMS 9.1 source), and `describe` preferred `$track->title` for a service track. A favourite
+  track or one of OUR OWN track rows (`_trackName`, since 1.0.4) is named "Title by Artist from Album", so a
+  replay from the history recorded that whole name as the title. Fix: the handler's title first, `$track->title`
+  as the fallback. Stations are unchanged: they are deliberately named from `$track->title`. Existing bad rows:
+  Simon removes his three by hand; a repair migration was offered and DECLINED. Guard: `t_tracker.pl`
+  "service title" (2 red on the old order) + a no-handler-title control.
+  1.0.13 (review of 1.0.12): the handler-first order is NOT for a plain web track (source `http`/`https`,
+  i.e. LMS's own HTTP handler); every plugin handler keeps it. A plain http(s) track keeps `$track->title` first: LMS's HTTP handler (`Protocols/HTTP.pm`
+  `getMetadataFor`, 9.1 source) builds its title from `getCurrentTitle`, which `playlist play` set to the row name,
+  and splits exactly one " - " into artist and title. So "Episode 12 - The Big One" was recorded as "The Big One".
+  Guard: "web track: keeps its own title" (red on 1.0.12).
+  Same review: the split's front half was also stored as the ARTIST (older than 1.0.12). `_isSplit`: for a plain web
+  track, drop the handler's artist when its artist and title rejoined with " - " (case and whitespace folded) equal
+  the track's own title; a real stream artist is kept. Guard: "web track: and not the split's front half" (red
+  before) + "CONTROL web track: an artist the handler really has is kept".
 - **NO BACK-FILL FROM LMS — declined by Simon, 2026-09-18.** An import from LMS's persistent DB
   was offered: `tracks_persistent` holds only ONE `lastplayed` + a `playcount` per LIBRARY track
   (no player, no earlier plays, almost certainly no streaming or radio), so it could only rebuild a
@@ -247,7 +314,12 @@ can be DISPROVEN. Closing a round is not a suppression.
   built 2026-09-19 and RELEASED to `main` (`v1.0.4`). 1.0.5 (year search + By date years) released to
   `main` (`v1.0.5`) 2026-09-19. 1.0.6 (By release) built on dev and installed 2026-09-19 (Qobuz lookup verified live); 1.0.7
   (Qobuz `epmini` → EP) built and INSTALLED the same day; VERIFIED LIVE: By release = Albums / EPs / Singles,
-  the stored EPMINI entry reads as an EP. These specific paths have not been checked individually and are covered by
+  the stored EPMINI entry reads as an EP. 2026-09-21: 1.0.8–1.0.14 built and committed on `dev` (`0053471`), unpushed;
+  1.0.11 was INSTALLED and the restart carry-on VERIFIED LIVE; 1.0.12–1.0.14 (service titles, the track row's
+  artist on line 2, plain web titles/artists) are built and 1.0.14 is INSTALLED. VERIFIED LIVE by Simon: a
+  streaming single-track row on Material shows the artist underneath, and it became an album entry after the
+  second track. Still OPEN: a Qobuz track replayed from a favourite or history row records its plain title.
+  The `startOffset` resume path is unexercised live. These specific paths have not been checked individually and are covered by
   the suites only:
   - `Sources::isStation` — any remote non-service url with no duration is a station. Not checked
     against TuneIn, Radio Paradise, BBC Sounds.
@@ -258,6 +330,25 @@ can be DISPROVEN. Closing a round is not a suppression.
     present), the home shelf, and the search row.
 
 ### C. CLOSED FINDINGS
+
+**Review rounds 2026-09-21 (1.0.8 → 1.0.14, five inline rounds, committed on dev through `0053471`, unpushed) —
+ALL CLOSED.** Six findings, five FIXED, one DECLINED. Details in `docs/VERSION-HISTORY.md` 1.0.8–1.0.14.
+
+| # | round | finding | disposition |
+|---|---|---|---|
+| 1 | review of 1.0.8 | resumed track dropped without refreshing `last_at`: a long track resumed after a restart split the album on the gap | FIXED 1.0.9 |
+| 2 | review of 1.0.9 | the mark armed for the full target: a track resumed part way through ended before it and was never recorded | FIXED 1.0.10, but that fix was a NO-OP, see #3 |
+| 3 | review of 1.0.10 | 1.0.10 read `$client->songElapsedSeconds`, which counts per STREAM; its test passed on a stub that counted per track | FIXED 1.0.11 (`startOffset`, first newsong only; stub corrected) |
+| 4 | review of 1.0.12 | handler-first titles also hit plain web tracks, where LMS's HTTP handler splits the row name at " - " | FIXED 1.0.13 |
+| 5 | review of 1.0.13 | the same split stored the front half as the ARTIST (older than 1.0.12) | FIXED 1.0.14 (`_isSplit`) |
+| 6 | review of 1.0.14 | `_isSplit` names a lexical `$a` (shadows `sort`'s) | DECLINED by Simon 2026-09-21: *"ill live with that for now"*; harmless, no `sort` in it. Rename only if a build touches it anyway |
+
+Cleared in the rounds (checked, not defects): review of 1.0.11: `startOffset` is set for a local resume on both
+paths (logged under `A RESTART IS NOT A NEW LISTEN`). Review of 1.0.12: every track row path (Recently played,
+home shelf, search, By date) uses `_trackName`, and album and By release rows keep `_titled`. Review of 1.0.14:
+a plugin metadata provider on an `http` url loses its artist only if it is exactly the title's front half.
+Test-harness lesson (#3): a stub built from the code's guess of an LMS value makes a no-op fix pass. Model the
+stub on LMS's source, then anti-test.
 
 **Review round 2026-09-19 (unpushed `e70f803`, 1.0.2) — CLOSED, one defect reported twice, FIXED.**
 `entryRow` (history rows) and `_albums` (By album tiles) moved the artist onto line2 only, which the
@@ -348,9 +439,9 @@ V=1 perl tools/t_tracker.pl
 ```
 | suite | protects |
 |---|---|
-| `t_tracker.pl` | the grouping rules end to end through the real callback + timers: one track, album promotion, A/B/A, stop, same url, gap, two players, skip, pause, Qobuz id grouping, first-credit grouping, Spotty error text, radio once per session (+ the deadline), a web track with no length at start is not timed as radio (skip at 61s of 300 not recorded), removed-mid-album |
+| `t_tracker.pl` | the grouping rules end to end through the real callback + timers: one track, album promotion, A/B/A, stop, same url, gap, two players, skip, pause, Qobuz id grouping, first-credit grouping, Spotty error text, radio once per session (+ the deadline), a web track with no length at start is not timed as radio (skip at 61s of 300 not recorded), removed-mid-album, a server restart (album carries on, resumed track once, long track, before-count, single track, deliberate replay, other album, stop, gap control, other player, radio), a local resume at an offset vs a seek control, a streaming restart from the top, a service track titled by its handler (+ no-title control), a plain web track keeping its own title and not the split's artist (+ real-artist control) |
 | `t_db.pl` | schema stamp + re-open, promote in one transaction, no orphan play on a missing entry, literal `%`/`_` search, indexes, forDay injection, remove/purge cascade, a failed COMMIT reported as failure by addToEntry/remove/purge |
-| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is one line "Title by Artist from Album" (each clause dropped alone; no second line), a station has no second line, By release (type rows in LMS order and names with counts, each opening its releases; library type read LIVE incl. Material's compilation rule, Qobuz type stored; LMS's releaseTypeName preferred) and its tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), year search (the Played in row above the text matches, ranges, a numeric name) and By date years (All of + months), context menu + remove, unticked checkbox stores 0 |
+| `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is "Title by Artist from Album" on the web skins and "Title from Album" over the artist on Material (each clause dropped alone; no artist = no second line), a station has no second line, By release (type rows in LMS order and names with counts, each opening its releases; library type read LIVE incl. Material's compilation rule, Qobuz type stored; LMS's releaseTypeName preferred) and its tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), year search (the Played in row above the text matches, ranges, a numeric name) and By date years (All of + months), context menu + remove, unticked checkbox stores 0 |
 | `t_load.pl` | every module loads; every `Plugins::ListeningHistory::X::y` call is defined |
 
 Version history: `docs/VERSION-HISTORY.md`.

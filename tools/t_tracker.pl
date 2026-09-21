@@ -22,7 +22,9 @@ ok('the tracker subscribes to playlist events', ref $CB eq 'CODE');
 # --- fakes -----------------------------------------------------------------------------
 { package FakeClient;  sub new { my ($c, $id, $name) = @_; bless { id => $id, name => $name, elapsed => 0 }, $c }
   sub id { $_[0]{id} } sub name { $_[0]{name} } sub playingSong { $_[0]{song} } sub songElapsedSeconds { $_[0]{elapsed} } }
-{ package FakeSong;    sub duration { $_[0]{duration} } sub track { $_[0]{track} } }
+# Like LMS: songElapsedSeconds counts from the start of the current STREAM; where a stream
+# started inside the track (a resume, a seek) is the song's startOffset.
+{ package FakeSong;    sub duration { $_[0]{duration} } sub track { $_[0]{track} } sub startOffset { $_[0]{startOffset} } }
 { package FakeTrack;   sub url { $_[0]{url} } sub title { $_[0]{title} } sub artistName { $_[0]{artist} }
   sub album { $_[0]{album} } sub albumname { $_[0]{albumname} } sub remote { $_[0]{remote} } }
 { package FakeAlbum;   sub id { $_[0]{id} } sub title { $_[0]{title} } sub year { $_[0]{year} }
@@ -177,6 +179,36 @@ is('qobuz: source', $e->[0]{source}, 'qobuz');
 is('qobuz: replays by the service album id', $e->[0]{ref}{svc_album_id}, 'qa1');
 is('qobuz: artwork from the handler', $e->[0]{artwork}, 'https://img/q.jpg');
 
+# --- a service track started from a row keeps the SERVICE's title ------------------------------
+# LMS stores the row's name as the track's title (`playlist play <url> <title>`). A Listening History
+# track row, or an LMS favourite, is named "Title by Artist from Album": recorded as the title, the
+# row then read "... by Artist from Album by Artist from Album".
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = {
+    'qobuz://n1.flac' => { title => 'Pylon', artist => 'beabadoobee', album => 'Pylon', albumId => 'qn1' },
+    'qobuz://n2.flac' => { artist => 'N Band', album => 'N Album', albumId => 'qn2' },
+};
+play($kitchen, remoteTrack(url => 'qobuz://n1.flac', title => 'Pylon by beabadoobee from Pylon'));
+is('service title: the handler\'s title, not the row name LMS stored', entries()->[0]{title}, 'Pylon');
+is('service title: the play is logged with it too', Plugins::ListeningHistory::DB::plays(entries()->[0]{id})->[0]{title}, 'Pylon');
+fresh();
+play($kitchen, remoteTrack(url => 'qobuz://n2.flac', title => 'N Title'));
+is('CONTROL service title: a handler with no title falls back to LMS\'s', entries()->[0]{title}, 'N Title');
+
+# A plain web track is NOT a service: LMS's HTTP handler takes its title from the row name and
+# splits one " - " into artist and title. The track's own title stays first there.
+fresh();
+$Slim::Player::ProtocolHandlers::META{https} = { 'https://pod.example/ep9.mp3' =>
+    { title => 'The Big One', artist => 'Episode 12', duration => 300 } };
+play($kitchen, remoteTrack(url => 'https://pod.example/ep9.mp3', title => 'Episode 12 - The Big One'), duration => 300);
+is('web track: keeps its own title, not the HTTP handler\'s split half', entries()->[0]{title}, 'Episode 12 - The Big One');
+is('web track: and not the split\'s front half as its artist', entries()->[0]{artist}, undef);
+fresh();
+$Slim::Player::ProtocolHandlers::META{https} = { 'https://pod.example/ep10.mp3' =>
+    { title => 'Real Song', artist => 'Real Artist', duration => 300 } };
+play($kitchen, remoteTrack(url => 'https://pod.example/ep10.mp3', title => 'Some Show'), duration => 300);
+is('CONTROL web track: an artist the handler really has is kept', entries()->[0]{artist}, 'Real Artist');
+
 # --- Qobuz release type: asked once per album, stored on the entry when it answers ---------------
 {
     package FakeQobuzAPI;
@@ -314,5 +346,150 @@ play($kitchen, libTrack(10, 2));
 $e = entries();
 is('removed mid-album: the next track starts a new entry', scalar @$e, 1);
 is('removed mid-album: as a track, with its own title', $e->[0]{title}, 'T2');
+
+# --- a server restart: the session is rebuilt from the database ---------------------------
+# restart() is what a server restart does to the tracker: its memory goes, the database stays.
+sub restart {
+    Slim::Utils::Timers::clear();
+    Plugins::ListeningHistory::Tracker->shutdown();
+    Plugins::ListeningHistory::Tracker->init();
+    ($CB) = map { $_->[0] } @Slim::Control::Request::SUBSCRIBED;
+}
+sub urlsOf { join ',', map { $_->{url} =~ m{/(\d+)\.flac$} ? $1 : $_->{url} } @{ Plugins::ListeningHistory::DB::plays($_[0]) } }
+
+fresh();
+play($kitchen, libTrack(10, $_)) for 1 .. 3;
+restart();
+play($kitchen, libTrack(10, 3));                  # resumed from Now Playing, already counted
+play($kitchen, libTrack(10, 4));
+$e = entries();
+is('restart mid-album: still ONE entry', scalar @$e, 1);
+is('restart mid-album: still an album', $e->[0]{kind}, 'album');
+is('restart mid-album: the resumed track is not counted twice', $e->[0]{tracks_played}, 4);
+is('restart mid-album: plays logged once each', urlsOf($e->[0]{id}), '1,2,3,4');
+
+# Local music resumed part way through a track not yet counted: LMS streams from the resume
+# point (startOffset 160) and songElapsedSeconds starts again at 0. Only the rest is owed, or
+# the track ends before the mark and a track heard in full is never recorded.
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2), listen => 0);     # down at 80% of track 2
+restart();
+$kitchen->{song}    = bless { duration => 200, track => libTrack(10, 2), startOffset => 160 }, 'FakeSong';
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+my $due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('resumed at 80%: the mark is due before the track ends (40s left)', $due <= 40);
+$kitchen->{elapsed} = 38;
+Slim::Utils::Timers::fire_timer($kitchen) if $due <= 40;
+play($kitchen, libTrack(10, 3));
+is('resumed at 80%: the resumed track is recorded', urlsOf(entries()->[0]{id}), '1,2,3');
+
+# CONTROL: a seek in normal play also starts a new stream at an offset with a newsong. It is not
+# a resume: the 90% is still owed, so seeking to the end is not a listen.
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2), listen => 0);
+$kitchen->{song}    = bless { duration => 200, track => libTrack(10, 2), startOffset => 190 }, 'FakeSong';
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');                       # the seek
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('CONTROL seek to 95%: the mark is not shortened', $due > 10);
+play($kitchen, libTrack(10, 3));
+is('CONTROL seek to 95%: the sought track is not recorded', urlsOf(entries()->[0]{id}), '1,3');
+
+# Streaming after a restart starts the track again from the top: heard in full, but already
+# counted before the restart, so it is not counted twice and the album carries on.
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = { map { ("qobuz://r$_.flac" =>
+    { title => "R$_", artist => 'R Band', album => 'R Album', albumId => 'qr1' }) } 1 .. 3 };
+play($kitchen, remoteTrack(url => "qobuz://r$_.flac", title => "R$_")) for 1, 2;
+restart();
+play($kitchen, remoteTrack(url => 'qobuz://r2.flac', title => 'R2'));
+play($kitchen, remoteTrack(url => 'qobuz://r3.flac', title => 'R3'));
+$e = entries();
+is('streaming restart from the top: one entry', scalar @$e, 1);
+is('streaming restart from the top: three tracks, the restarted one once', $e->[0]{tracks_played}, 3);
+
+# A long track counted before the restart and heard again after it: the gap runs from the
+# resume, not from the count before the restart, or the album splits again.
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2), duration => 1500);
+restart();
+TestClock::advance(20 * 60);                      # restart time, then 20 minutes of track 2 again
+play($kitchen, libTrack(10, 2), duration => 1500);
+TestClock::advance(20 * 60);
+play($kitchen, libTrack(10, 3));
+$e = entries();
+is('restart in a long track: the next track still joins the album', scalar @$e, 1);
+is('restart in a long track: three tracks, the resumed one once', urlsOf($e->[0]{id}), '1,2,3');
+
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2));
+play($kitchen, libTrack(10, 3), listen => 0);     # down at half way through track 3
+restart();
+play($kitchen, libTrack(10, 3));
+$e = entries();
+is('restart before the track counted: it joins the album', scalar @$e, 1);
+is('restart before the track counted: and IS counted', urlsOf($e->[0]{id}), '1,2,3');
+
+fresh();
+play($kitchen, libTrack(10, 1));
+restart();
+play($kitchen, libTrack(10, 1));
+is('restart on a single track: not counted twice', scalar @{ entries() }, 1);
+play($kitchen, libTrack(10, 2));
+$e = entries();
+is('restart on a single track: the next one makes it an album', $e->[0]{kind}, 'album');
+is('restart on a single track: of two', $e->[0]{tracks_played}, 2);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+restart();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 1));                  # played again on purpose
+is('restart: only the FIRST play is taken as the resume, a replay still counts', scalar @{ entries() }, 2);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2));
+restart();
+play($kitchen, libTrack(20, 1));                  # something else entirely
+$e = entries();
+is('restart then another album: a new entry', scalar @$e, 2);
+is('restart then another album: the old one is untouched', $e->[1]{tracks_played}, 2);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2));
+restart();
+play($kitchen, libTrack(10, 3));
+event($kitchen, 'stop');
+play($kitchen, libTrack(10, 4));
+$e = entries();
+is('restart then stop: the stop still ends the session', scalar @$e, 2);
+is('restart then stop: the album carried on before it', $e->[1]{tracks_played}, 3);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+TestClock::advance(2 * 3600);
+restart();
+play($kitchen, libTrack(10, 1));
+is('CONTROL restart after the gap: a new listen', scalar @{ entries() }, 2);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+restart();
+play($lounge, libTrack(10, 1));
+is('restart: another player does not carry on Kitchen\'s entry', scalar @{ entries() }, 2);
+
+fresh();
+play($kitchen, $station, duration => 0);
+restart();
+play($kitchen, $station, duration => 0);
+Slim::Utils::Timers::fire_timer($kitchen);
+is('restart on radio: the station is not logged again', scalar @{ entries() }, 1);
 
 main::done();

@@ -15,6 +15,13 @@ package Plugins::ListeningHistory::Tracker;
 #
 #   A radio station is recorded ONCE per session, after 60s. The stream's title changes
 #   arrive as newsong events on the same url and are ignored.
+#
+#   Sessions live in memory, so a server restart would forget them: the album being played
+#   would split in two when it is resumed, and a track already counted would be counted
+#   again. So the FIRST newsong on each player after startup rebuilds its session from the
+#   player's last entry in the database, when that ended within session_gap_min, and the
+#   first play counted after that is dropped if it is the same url as the last play
+#   recorded: that is the resumed track, heard once, not twice.
 
 use strict;
 use warnings;
@@ -33,7 +40,8 @@ my $prefs = preferences('plugin.listeninghistory');
 use constant FALLBACK_SECS => 60;
 
 my %pending;   # per player: { client, url, target, started_at, station }
-my %session;   # per player: { entry_id, kind, album_key, url, urls => {}, last_at }
+my %session;   # per player: { entry_id, kind, album_key, url, urls => {}, last_at, resumed_url }
+my %restored;  # per player: 1 once the first newsong since startup has rebuilt its session
 
 sub init {
     Slim::Control::Request::subscribe(\&_onChange, [['playlist'], ['newsong', 'stop', 'clear']]);
@@ -44,7 +52,8 @@ sub init {
 sub shutdown {
     Slim::Control::Request::unsubscribe(\&_onChange);
     _cancel($_) for keys %pending;
-    %session = ();
+    %session  = ();
+    %restored = ();
     return;
 }
 
@@ -63,6 +72,9 @@ sub _onChange {
     my $track = eval { $song->track }         or return;
     my $url   = eval { $track->url };
     return unless defined $url && length $url;
+
+    my $first = !$restored{$cid}++;
+    _restore($cid) if $first;
 
     # A radio stream announces each new song title as a newsong on the SAME url. That is
     # not a new listen: keep the pending station mark, and never log the station twice.
@@ -87,10 +99,46 @@ sub _onChange {
         station    => $station,
         remote     => $remote,
     };
+    # The first track after a restart may be resumed where it stopped (local files are; streams
+    # start again from the top). What came before the resume point was heard before the restart,
+    # so only the rest of the 90% is still owed. songElapsedSeconds counts from the start of the
+    # STREAM, not the track, so it is the resume point, startOffset, that comes off the target.
+    # Only here: a seek also starts a new stream and a newsong, and must still be listened through.
+    if ($first && $info->{target} > 0) {
+        my $from = eval { $song->startOffset } || 0;
+        if ($from > 0) {
+            $info->{target} -= $from;
+            $info->{target} = 1 if $info->{target} < 1;
+        }
+    }
+
     my $wait = $info->{target} > 0 ? $info->{target} : FALLBACK_SECS;
     $wait = 5 if $wait < 5;
     $pending{$cid} = $info;
     Slim::Utils::Timers::setTimer($client, time() + $wait, \&_markTick, $info);
+    return;
+}
+
+# Rebuild a player's session from its last entry, if that ended within the session gap.
+# Deliberately NOT stopped by a stop or clear seen before it: what LMS sends around a restart
+# is unmeasured, and the gap alone decides whether the last entry is still this listen.
+sub _restore {
+    my ($cid) = @_;
+    my $e = eval { Plugins::ListeningHistory::DB::forPlayer($cid, 1)->[0] } or return;
+    my $gap = ($prefs->get('session_gap_min') // 30) * 60;
+    return if time() - $e->{played_at} > $gap;
+    my $plays = Plugins::ListeningHistory::DB::plays($e->{id});
+    return unless @$plays;
+    $session{$cid} = {
+        entry_id    => $e->{id},
+        kind        => $e->{kind},
+        album_key   => $e->{album_key},
+        url         => $e->{url},
+        urls        => { map { defined $_->{url} ? ($_->{url} => 1) : () } @$plays },
+        last_at     => $e->{played_at},
+        resumed_url => $plays->[-1]{url},
+    };
+    $log->info("Listening History: carrying on entry $e->{id} ($e->{kind}) on $cid after a restart");
     return;
 }
 
@@ -163,6 +211,17 @@ sub _record {
     unless ($d) {
         $log->info("Listening History: not recording $info->{url} ($why)");
         return;
+    }
+
+    # The first play counted after a restart: the track that was playing when it went down is
+    # resumed, and it may already be recorded. Only this one play is checked.
+    if (my $s = $session{$cid}) {
+        my $resumed = delete $s->{resumed_url};
+        if (defined $resumed && $resumed eq $d->{url}) {
+            $s->{last_at} = time();   # still this listen: the gap runs from here, not from before the restart
+            $log->info("Listening History: not recording $d->{url} again, resumed after a restart");
+            return;
+        }
     }
 
     my $now = time();
