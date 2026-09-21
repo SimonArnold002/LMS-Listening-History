@@ -238,11 +238,20 @@ can be DISPROVEN. Closing a round is not a suppression.
   that url, then forgets it, so a deliberate replay afterwards still counts. Dropping it also sets
   `last_at` to now (review 2026-09-21: without it a long track resumed after a restart split the album
   again, the gap measured from the count BEFORE the restart; guard: "restart in a long track", 2 red without it).
-  1.0.10 (second review, 2026-09-21): `_onChange` arms the mark for `target - songElapsedSeconds`, not the full
-  target. A track resumed at 80% ended before a full-length wait, so a track heard in full was never recorded
-  (older than this fix, made common by restarts). Early is harmless: `_markTick` re-checks progress and re-arms.
-  Guard: "resumed at 80%", 2 red without it. Corrects the earlier claim that an already-counted track resumed
-  near its end is counted again: it ends before the mark; only a resume FROM THE TOP could double-count. A stop/clear seen before
+  1.0.10 (second review) armed the mark for `target - $client->songElapsedSeconds`: a NO-OP, and its test
+  passed only because the stub counted elapsed from the start of the TRACK. 1.0.11 (third review, 2026-09-21)
+  replaces it: on the FIRST newsong per player after startup only, `$song->startOffset` (the resume point)
+  comes off the target; `_markTick` stays stream-relative, so a seek must still be listened through.
+  Simon, 2026-09-21: streaming titles restart FROM THE TOP after a restart (the `resumed_url` drop covers
+  those); LOCAL files resume where they stopped (the startOffset path). Guards: "resumed at 80%" (2 red on
+  1.0.10 with the corrected stub), "CONTROL seek to 95%", "streaming restart from the top".
+  VERIFIED FROM LMS 9.1 SOURCE (read, not measured live), do not re-derive:
+  - `Squeezebox2::songElapsedSeconds` counts from the start of the current STREAM. The track position is
+    `StreamingController::playingSongElapsed` (= `Slim::Player::Source::songTime`), which adds `startOffset`.
+  - A seek fires `newsong`: `_JumpToTime` stops and re-streams, the player's track-started event runs
+    `_Playing`, which notifies `playlist newsong`.
+  - LMS's own auto-resume on reconnect (`Player::resumeOnPower`, powerOnResume …PlayOn + playingAtPowerOff)
+    is `playlist jump <index> … {timeOffset => positionAtDisconnect}`, i.e. a resume at an offset. A stop/clear seen before
   the first newsong does NOT cancel the restore: what LMS sends around a restart is unmeasured, and
   the gap decides. Known limit, accepted: restart, then within 30 min deliberately play the track
   that was last recorded = not counted. Guard: `tools/t_tracker.pl` "restart" block (10 red on the

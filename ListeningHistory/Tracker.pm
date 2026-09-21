@@ -73,7 +73,8 @@ sub _onChange {
     my $url   = eval { $track->url };
     return unless defined $url && length $url;
 
-    _restore($cid) unless $restored{$cid}++;
+    my $first = !$restored{$cid}++;
+    _restore($cid) if $first;
 
     # A radio stream announces each new song title as a newsong on the SAME url. That is
     # not a new listen: keep the pending station mark, and never log the station twice.
@@ -98,10 +99,20 @@ sub _onChange {
         station    => $station,
         remote     => $remote,
     };
-    # Arm for what is LEFT to hear: a track resumed part way through (after a restart) ends
-    # before a full-length wait. Arriving early costs nothing, _markTick re-checks progress.
-    my $played = eval { $client->songElapsedSeconds } || 0;
-    my $wait = $info->{target} > 0 ? $info->{target} - $played : FALLBACK_SECS;
+    # The first track after a restart may be resumed where it stopped (local files are; streams
+    # start again from the top). What came before the resume point was heard before the restart,
+    # so only the rest of the 90% is still owed. songElapsedSeconds counts from the start of the
+    # STREAM, not the track, so it is the resume point, startOffset, that comes off the target.
+    # Only here: a seek also starts a new stream and a newsong, and must still be listened through.
+    if ($first && $info->{target} > 0) {
+        my $from = eval { $song->startOffset } || 0;
+        if ($from > 0) {
+            $info->{target} -= $from;
+            $info->{target} = 1 if $info->{target} < 1;
+        }
+    }
+
+    my $wait = $info->{target} > 0 ? $info->{target} : FALLBACK_SECS;
     $wait = 5 if $wait < 5;
     $pending{$cid} = $info;
     Slim::Utils::Timers::setTimer($client, time() + $wait, \&_markTick, $info);

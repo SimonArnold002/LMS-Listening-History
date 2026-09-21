@@ -22,7 +22,9 @@ ok('the tracker subscribes to playlist events', ref $CB eq 'CODE');
 # --- fakes -----------------------------------------------------------------------------
 { package FakeClient;  sub new { my ($c, $id, $name) = @_; bless { id => $id, name => $name, elapsed => 0 }, $c }
   sub id { $_[0]{id} } sub name { $_[0]{name} } sub playingSong { $_[0]{song} } sub songElapsedSeconds { $_[0]{elapsed} } }
-{ package FakeSong;    sub duration { $_[0]{duration} } sub track { $_[0]{track} } }
+# Like LMS: songElapsedSeconds counts from the start of the current STREAM; where a stream
+# started inside the track (a resume, a seek) is the song's startOffset.
+{ package FakeSong;    sub duration { $_[0]{duration} } sub track { $_[0]{track} } sub startOffset { $_[0]{startOffset} } }
 { package FakeTrack;   sub url { $_[0]{url} } sub title { $_[0]{title} } sub artistName { $_[0]{artist} }
   sub album { $_[0]{album} } sub albumname { $_[0]{albumname} } sub remote { $_[0]{remote} } }
 { package FakeAlbum;   sub id { $_[0]{id} } sub title { $_[0]{title} } sub year { $_[0]{year} }
@@ -336,21 +338,48 @@ is('restart mid-album: still an album', $e->[0]{kind}, 'album');
 is('restart mid-album: the resumed track is not counted twice', $e->[0]{tracks_played}, 4);
 is('restart mid-album: plays logged once each', urlsOf($e->[0]{id}), '1,2,3,4');
 
-# Resumed part way through a track not yet counted: the mark is set for what is LEFT to hear,
-# or the track ends before the mark and a track heard in full is never recorded.
+# Local music resumed part way through a track not yet counted: LMS streams from the resume
+# point (startOffset 160) and songElapsedSeconds starts again at 0. Only the rest is owed, or
+# the track ends before the mark and a track heard in full is never recorded.
 fresh();
 play($kitchen, libTrack(10, 1));
 play($kitchen, libTrack(10, 2), listen => 0);     # down at 80% of track 2
 restart();
-$kitchen->{song}    = bless { duration => 200, track => libTrack(10, 2) }, 'FakeSong';
-$kitchen->{elapsed} = 160;                        # LMS resumes it where it stopped
+$kitchen->{song}    = bless { duration => 200, track => libTrack(10, 2), startOffset => 160 }, 'FakeSong';
+$kitchen->{elapsed} = 0;
 event($kitchen, 'newsong');
 my $due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
 ok('resumed at 80%: the mark is due before the track ends (40s left)', $due <= 40);
-$kitchen->{elapsed} = 195;
+$kitchen->{elapsed} = 38;
 Slim::Utils::Timers::fire_timer($kitchen) if $due <= 40;
 play($kitchen, libTrack(10, 3));
 is('resumed at 80%: the resumed track is recorded', urlsOf(entries()->[0]{id}), '1,2,3');
+
+# CONTROL: a seek in normal play also starts a new stream at an offset with a newsong. It is not
+# a resume: the 90% is still owed, so seeking to the end is not a listen.
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2), listen => 0);
+$kitchen->{song}    = bless { duration => 200, track => libTrack(10, 2), startOffset => 190 }, 'FakeSong';
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');                       # the seek
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('CONTROL seek to 95%: the mark is not shortened', $due > 10);
+play($kitchen, libTrack(10, 3));
+is('CONTROL seek to 95%: the sought track is not recorded', urlsOf(entries()->[0]{id}), '1,3');
+
+# Streaming after a restart starts the track again from the top: heard in full, but already
+# counted before the restart, so it is not counted twice and the album carries on.
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = { map { ("qobuz://r$_.flac" =>
+    { title => "R$_", artist => 'R Band', album => 'R Album', albumId => 'qr1' }) } 1 .. 3 };
+play($kitchen, remoteTrack(url => "qobuz://r$_.flac", title => "R$_")) for 1, 2;
+restart();
+play($kitchen, remoteTrack(url => 'qobuz://r2.flac', title => 'R2'));
+play($kitchen, remoteTrack(url => 'qobuz://r3.flac', title => 'R3'));
+$e = entries();
+is('streaming restart from the top: one entry', scalar @$e, 1);
+is('streaming restart from the top: three tracks, the restarted one once', $e->[0]{tracks_played}, 3);
 
 # A long track counted before the restart and heard again after it: the gap runs from the
 # resume, not from the count before the restart, or the album splits again.
