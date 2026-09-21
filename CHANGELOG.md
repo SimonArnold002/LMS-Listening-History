@@ -3,6 +3,19 @@
 User-facing release notes, written at each merge to `main`. Per-build engineering notes live in
 `docs/VERSION-HISTORY.md`.
 
+## 1.0.14 — 2026-09-21
+
+A server restart no longer splits your history, and track entries show the right title and artist.
+
+### Improvements
+- **Track entries show their artist on the Material Skin.** A single track now reads *Title from Album*, with the artist underneath, the same way an album entry shows its artist. Before, the one long line was cut off before the artist. The Default and Classic web skins still show one line, *Title by Artist from Album*.
+
+### Fixes
+- **A server restart isn't a new listen.** If an album carries on after the server restarts, it stays one entry, and a track already counted before the restart isn't counted again.
+- **A track resumed part way through is still recorded.** A local track that picks up where it left off after a restart counts once the rest of it has played.
+- **Replayed streaming tracks keep their own title.** Playing a streaming track again from a favourite or from your history no longer records the whole row name, like *Title by Artist from Album*, as its title.
+- **Web tracks with " - " in their name keep their title.** A podcast episode or other web track called, say, *Episode 12 - The Big One* is recorded under that full name, and *Episode 12* is no longer stored as its artist.
+
 ## 1.0.7 — 2026-09-19
 
 Browse your history by release, split into albums, EPs and singles the way LMS does.

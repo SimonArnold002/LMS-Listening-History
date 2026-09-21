@@ -116,7 +116,7 @@
   <h1>Listening History — LMS Plugin</h1>
   <p class="tagline">A plugin for <strong>Lyrion Music Server (LMS)</strong> that keeps a full history of what you've played, on <strong>every player</strong>, from your <strong>local library</strong> and from <strong>streaming services</strong> (Qobuz, Tidal, Deezer, Spotify and others), plus internet radio. Play a whole album and it's logged as <strong>one album</strong>, not a dozen separate tracks. Play one track and it's logged as that track. Every entry plays again with one tap, streaming ones included.</p>
   <div class="badges">
-    <span class="badge accent">v1.0.7</span>
+    <span class="badge accent">v1.0.14</span>
     <span class="badge">LMS 9.0.0+</span>
     <span class="badge">Material Skin</span>
     <span class="badge">Library + Streaming + Radio</span>
@@ -134,7 +134,7 @@
 <div class="card"><h4>Albums stay albums</h4><p>Two or more tracks of the same release played back to back become one entry, whether it's an album, an EP or a single</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Every player</h4><p>Every player on the server is recorded; browse by player to see what played where</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Library and streaming</h4><p>Local files and any streaming service, in one history</p><span class="needs">Needs: The service's own plugin</span></div>
-<div class="card"><h4>Looks like LMS</h4><p>An album reads album over artist, a single track reads like an LMS favourite, and streaming entries carry the service's badge on the artwork</p><span class="needs">Needs: Badge: a Material Skin newer than 6.4.9</span></div>
+<div class="card"><h4>Looks like LMS</h4><p>An album reads album over artist, a single track reads track and album over artist, and streaming entries carry the service's badge on the artwork</p><span class="needs">Needs: Badge: a Material Skin newer than 6.4.9</span></div>
 <div class="card"><h4>Plays again</h4><p>Tap an entry to play it: a whole album, the single track, or the radio station</p><span class="needs">Needs: The service's own plugin</span></div>
 <div class="card"><h4>Material home shelf</h4><p>A <em>Listening History</em> row of your latest 50 entries on the home screen</p><span class="needs">Needs: Material Skin</span></div>
 <div class="card"><h4>Look further back</h4><p>Browse by date, artist, release, service or player, or search by text, a date, a year or a range of either</p><span class="needs">Needs: nothing</span></div>
@@ -167,6 +167,8 @@
 </li>
 <li><strong>A new album, a stop, or a cleared queue starts a new entry.</strong> So does a gap longer than 30 minutes between two tracks.
 </li>
+<li><strong>A server restart doesn't split anything.</strong> If an album carries on after the server restarts, it stays one entry, and a track already counted isn't counted again.
+</li>
 <li><strong>Radio</strong> is recorded once per listening session, named after the station, 60 seconds after it starts. Song-title changes within the stream don't add entries.
 </li></ul>
 <h3>Browsing</h3>
@@ -189,7 +191,7 @@
 <ul>
 <li><strong>Album</strong>: the album, with the artist underneath. The Default and Classic web skins show it on one line, <em>Album by Artist</em>.
 </li>
-<li><strong>Track</strong>: one line, the way LMS names a favourite track, e.g. <em>Live By You by Actress from Radical Frame</em>.
+<li><strong>Track</strong>: the track and its album, with the artist underneath, e.g. <em>Live By You from Radical Frame</em> over <em>Actress</em>. The Default and Classic web skins show it on one line, the way LMS names a favourite track: <em>Live By You by Actress from Radical Frame</em>.
 </li>
 <li><strong>Radio</strong>: the station's name.
 </li></ul>
