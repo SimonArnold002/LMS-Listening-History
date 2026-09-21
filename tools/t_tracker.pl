@@ -195,6 +195,20 @@ fresh();
 play($kitchen, remoteTrack(url => 'qobuz://n2.flac', title => 'N Title'));
 is('CONTROL service title: a handler with no title falls back to LMS\'s', entries()->[0]{title}, 'N Title');
 
+# A plain web track is NOT a service: LMS's HTTP handler takes its title from the row name and
+# splits one " - " into artist and title. The track's own title stays first there.
+fresh();
+$Slim::Player::ProtocolHandlers::META{https} = { 'https://pod.example/ep9.mp3' =>
+    { title => 'The Big One', artist => 'Episode 12', duration => 300 } };
+play($kitchen, remoteTrack(url => 'https://pod.example/ep9.mp3', title => 'Episode 12 - The Big One'), duration => 300);
+is('web track: keeps its own title, not the HTTP handler\'s split half', entries()->[0]{title}, 'Episode 12 - The Big One');
+is('web track: and not the split\'s front half as its artist', entries()->[0]{artist}, undef);
+fresh();
+$Slim::Player::ProtocolHandlers::META{https} = { 'https://pod.example/ep10.mp3' =>
+    { title => 'Real Song', artist => 'Real Artist', duration => 300 } };
+play($kitchen, remoteTrack(url => 'https://pod.example/ep10.mp3', title => 'Some Show'), duration => 300);
+is('CONTROL web track: an artist the handler really has is kept', entries()->[0]{artist}, 'Real Artist');
+
 # --- Qobuz release type: asked once per album, stored on the entry when it answers ---------------
 {
     package FakeQobuzAPI;

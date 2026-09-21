@@ -51,7 +51,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | `_titled`: web-skin `name` = "Album by Artist", Material gets `line1` over `line2` | **DECIDED by Simon 2026-09-19** (1.0.2 review) | `THE WEB SKINS KEEP THE ARTIST IN THE NAME` |
 | `_trackName`: a single-track row: web skins "Title by Artist from Album" (as LMS names a favourite track); Material "Title from Album" over the artist | **DECIDED by Simon 2026-09-19, CHANGED by Simon 2026-09-21** (artist to line 2) | `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE` |
 | restart carry-on `Tracker::_restore`, `resumed_url`: first newsong per player after startup rebuilds the session from its last entry (within `session_gap_min`); the first counted play is dropped if it is the last play's url | **ASKED FOR by Simon 2026-09-21**; carry-on VERIFIED LIVE 1.0.11, offset path unexercised | `A RESTART IS NOT A NEW LISTEN` |
-| service track title `Sources::describe`: handler `$meta->{title}` BEFORE `$track->title` (radio still names from `$track->title`) | **FIXED 2026-09-21**, asked for by Simon | `THE SERVICE NAMES ITS TRACK` |
+| service track title `Sources::describe`: handler `$meta->{title}` BEFORE `$track->title`, except a plain web track (`http`/`https`: LMS's HTTP handler splits the row name); radio names from `$track->title` | **FIXED 2026-09-21**, asked for by Simon | `THE SERVICE NAMES ITS TRACK` |
 | back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
 | app/shelf logo `ListeningHistoryIcon` = Google `music_history`, not Material's `history` glyph | **KEPT by Simon 2026-09-18** | `THE LOGO STAYS` |
 | "More by this artist" context entry | DROPPED at build; By artist covers it | `MORE BY THIS ARTIST` |
@@ -284,6 +284,15 @@ can be DISPROVEN. Closing a round is not a suppression.
   as the fallback. Stations are unchanged: they are deliberately named from `$track->title`. Existing bad rows:
   Simon removes his three by hand; a repair migration was offered and DECLINED. Guard: `t_tracker.pl`
   "service title" (2 red on the old order) + a no-handler-title control.
+  1.0.13 (review of 1.0.12): the handler-first order is NOT for a plain web track (source `http`/`https`,
+  i.e. LMS's own HTTP handler); every plugin handler keeps it. A plain http(s) track keeps `$track->title` first: LMS's HTTP handler (`Protocols/HTTP.pm`
+  `getMetadataFor`, 9.1 source) builds its title from `getCurrentTitle`, which `playlist play` set to the row name,
+  and splits exactly one " - " into artist and title. So "Episode 12 - The Big One" was recorded as "The Big One".
+  Guard: "web track: keeps its own title" (red on 1.0.12).
+  Same review: the split's front half was also stored as the ARTIST (older than 1.0.12). `_isSplit`: for a plain web
+  track, drop the handler's artist when its artist and title rejoined with " - " (case and whitespace folded) equal
+  the track's own title; a real stream artist is kept. Guard: "web track: and not the split's front half" (red
+  before) + "CONTROL web track: an artist the handler really has is kept".
 - **NO BACK-FILL FROM LMS — declined by Simon, 2026-09-18.** An import from LMS's persistent DB
   was offered: `tracks_persistent` holds only ONE `lastplayed` + a `playcount` per LIBRARY track
   (no player, no earlier plays, almost certainly no streaming or radio), so it could only rebuild a

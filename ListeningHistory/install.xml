@@ -8,7 +8,7 @@
 
 <module>Plugins::ListeningHistory::Plugin</module>
 
-<version>1.0.12</version>
+<version>1.0.14</version>
 
 <description>PLUGIN_LH_DESC</description>
 

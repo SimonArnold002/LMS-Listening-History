@@ -198,11 +198,18 @@ sub describe {
     }
     else {
         my $meta = playingMeta($client, $url);
-        # The service's own title first: LMS stores the name of the row a track was started from
+        # The handler's own title first: LMS stores the name of the row a track was started from
         # as its title (`playlist play <url> <title>`), and a favourite or one of our own track
-        # rows is named "Title by Artist from Album". A station is named from $track below.
-        $d{title}  = _first($meta->{title}, eval { $track->title });
-        $d{artist} = _first($meta->{artist}, eval { $track->artistName });
+        # rows is named "Title by Artist from Album". NOT for a plain web track: LMS's own HTTP
+        # handler builds its title from that same row name, split at one " - " into artist and
+        # title, so there the track's own title stays first. A station is named from $track below.
+        my $web = $source =~ /^https?$/;
+        $d{title}  = $web ? _first(eval { $track->title }, $meta->{title})
+                          : _first($meta->{title}, eval { $track->title });
+        # The same split gives the front half as the ARTIST. Recognised by the halves rejoining to
+        # the track's own title; an artist the handler really has (stream metadata) is kept.
+        my $split = $web && _isSplit($meta, eval { $track->title });
+        $d{artist} = _first($split ? () : $meta->{artist}, eval { $track->artistName });
         $d{album}  = _first($meta->{album}, eval { $track->albumname });
         my $y = $meta->{year};
         $d{year}    = $y if defined $y && !ref $y && $y =~ /^\d{4}$/;
@@ -243,6 +250,16 @@ sub describe {
     return (undef, 'no title') unless defined $d{title} && length $d{title};
     $d{album_key} = $d{is_station} ? "station:$url" : albumKey(\%d);
     return \%d;
+}
+
+# Did LMS's HTTP handler make its artist and title by splitting this title at " - "?
+sub _isSplit {
+    my ($meta, $title) = @_;
+    my ($a, $t) = (_str($meta->{artist}), _str($meta->{title}));
+    $title = _str($title);
+    return 0 unless defined $a && defined $t && defined $title;
+    my $sq = sub { (my $v = lc shift) =~ s/\s+/ /g; $v };
+    return $sq->("$a - $t") eq $sq->($title) ? 1 : 0;
 }
 
 # The Spotify release id of a playing track, from Spotty's own track cache (no Web API
