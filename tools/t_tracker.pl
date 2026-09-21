@@ -179,6 +179,22 @@ is('qobuz: source', $e->[0]{source}, 'qobuz');
 is('qobuz: replays by the service album id', $e->[0]{ref}{svc_album_id}, 'qa1');
 is('qobuz: artwork from the handler', $e->[0]{artwork}, 'https://img/q.jpg');
 
+# --- a service track started from a row keeps the SERVICE's title ------------------------------
+# LMS stores the row's name as the track's title (`playlist play <url> <title>`). A Listening History
+# track row, or an LMS favourite, is named "Title by Artist from Album": recorded as the title, the
+# row then read "... by Artist from Album by Artist from Album".
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = {
+    'qobuz://n1.flac' => { title => 'Pylon', artist => 'beabadoobee', album => 'Pylon', albumId => 'qn1' },
+    'qobuz://n2.flac' => { artist => 'N Band', album => 'N Album', albumId => 'qn2' },
+};
+play($kitchen, remoteTrack(url => 'qobuz://n1.flac', title => 'Pylon by beabadoobee from Pylon'));
+is('service title: the handler\'s title, not the row name LMS stored', entries()->[0]{title}, 'Pylon');
+is('service title: the play is logged with it too', Plugins::ListeningHistory::DB::plays(entries()->[0]{id})->[0]{title}, 'Pylon');
+fresh();
+play($kitchen, remoteTrack(url => 'qobuz://n2.flac', title => 'N Title'));
+is('CONTROL service title: a handler with no title falls back to LMS\'s', entries()->[0]{title}, 'N Title');
+
 # --- Qobuz release type: asked once per album, stored on the entry when it answers ---------------
 {
     package FakeQobuzAPI;

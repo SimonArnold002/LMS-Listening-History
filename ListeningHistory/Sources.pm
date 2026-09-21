@@ -198,7 +198,10 @@ sub describe {
     }
     else {
         my $meta = playingMeta($client, $url);
-        $d{title}  = _first(eval { $track->title }, $meta->{title});
+        # The service's own title first: LMS stores the name of the row a track was started from
+        # as its title (`playlist play <url> <title>`), and a favourite or one of our own track
+        # rows is named "Title by Artist from Album". A station is named from $track below.
+        $d{title}  = _first($meta->{title}, eval { $track->title });
         $d{artist} = _first($meta->{artist}, eval { $track->artistName });
         $d{album}  = _first($meta->{album}, eval { $track->albumname });
         my $y = $meta->{year};

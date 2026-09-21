@@ -49,8 +49,9 @@ grep -n "_record\|album_key" CLAUDE.md
 | service badge `Sources::extid` / row `extid`; NO service name in `entryRow` line2 | **DECIDED by Simon 2026-09-18** (1.0.1) | `THE SERVICE IS A BADGE` |
 | `entryRow` text: Album over Artist (a track: one line "Title by Artist from Album", 1.0.4), no count / player / time on the row; `_when`, `PLUGIN_LH_TRACKS_OF`, `PLUGIN_LH_FROM` removed | **DECIDED by Simon 2026-09-19** | `A ROW READS LIKE A RELEASE` |
 | `_titled`: web-skin `name` = "Album by Artist", Material gets `line1` over `line2` | **DECIDED by Simon 2026-09-19** (1.0.2 review) | `THE WEB SKINS KEEP THE ARTIST IN THE NAME` |
-| `_trackName`: a single-track row is ONE line "Title by Artist from Album", as LMS names a favourite track | **DECIDED by Simon 2026-09-19** | `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE` |
-| restart carry-on `Tracker::_restore`, `resumed_url`: first newsong per player after startup rebuilds the session from its last entry (within `session_gap_min`); the first counted play is dropped if it is the last play's url | **ASKED FOR by Simon 2026-09-21**; UNVERIFIED LIVE | `A RESTART IS NOT A NEW LISTEN` |
+| `_trackName`: a single-track row: web skins "Title by Artist from Album" (as LMS names a favourite track); Material "Title from Album" over the artist | **DECIDED by Simon 2026-09-19, CHANGED by Simon 2026-09-21** (artist to line 2) | `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE` |
+| restart carry-on `Tracker::_restore`, `resumed_url`: first newsong per player after startup rebuilds the session from its last entry (within `session_gap_min`); the first counted play is dropped if it is the last play's url | **ASKED FOR by Simon 2026-09-21**; carry-on VERIFIED LIVE 1.0.11, offset path unexercised | `A RESTART IS NOT A NEW LISTEN` |
+| service track title `Sources::describe`: handler `$meta->{title}` BEFORE `$track->title` (radio still names from `$track->title`) | **FIXED 2026-09-21**, asked for by Simon | `THE SERVICE NAMES ITS TRACK` |
 | back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
 | app/shelf logo `ListeningHistoryIcon` = Google `music_history`, not Material's `history` glyph | **KEPT by Simon 2026-09-18** | `THE LOGO STAYS` |
 | "More by this artist" context entry | DROPPED at build; By artist covers it | `MORE BY THIS ARTIST` |
@@ -214,6 +215,12 @@ can be DISPROVEN. Closing a round is not a suppression.
     album over artist (`_titled`); stations stay their name.
     Guard: `t_browse.pl` (the full form, no line1/line2, each clause dropped alone, album-row control);
     anti-tested (no FROM clause: 4 red; track put back on `_titled`: 5 red).
+    **CHANGED by Simon 2026-09-21:** *"for single played tracks is it possible that the artist can show where it
+    does for albums?"* then *"keep the track from album on top row, artist on 2nd"*. The one long line was cut off
+    before the artist on Material. Now `name` stays "Title by Artist from Album" (web skins), plus `line1` =
+    "Title from Album" and `line2` = the artist. With no artist there's no line1/line2, just the name. Offered and
+    NOT chosen: the album on line 2 as well ("Artist · Album", the kind of tail removed on 2026-09-19).
+    Guard: `t_browse.pl` track-row block (8 red on the one-line version).
   - **THE WEB SKINS KEEP THE ARTIST IN THE NAME (`_titled`) — Simon, 2026-09-19, from the 1.0.2 review.**
     Default / Classic draw `name` only (never line2), so a bare title there lost the artist. A release row
     now carries `name` = "Album by Artist" (core string `BY`, as LMS's own web lists word it) plus `line1`
@@ -251,12 +258,32 @@ can be DISPROVEN. Closing a round is not a suppression.
   - A seek fires `newsong`: `_JumpToTime` stops and re-streams, the player's track-started event runs
     `_Playing`, which notifies `playlist newsong`.
   - LMS's own auto-resume on reconnect (`Player::resumeOnPower`, powerOnResume …PlayOn + playingAtPowerOff)
-    is `playlist jump <index> … {timeOffset => positionAtDisconnect}`, i.e. a resume at an offset. A stop/clear seen before
+    is `playlist jump <index> … {timeOffset => positionAtDisconnect}`, i.e. a resume at an offset.
+  - A local file started at an offset DOES set `$song->startOffset`, on both paths: a transcoder seek
+    (`Song::open`, `$transcoder->{start} = $self->startOffset(timeOffset)`) and a direct byte seek
+    (`Protocols::File`, `$song->startOffset($seekdata->{timeOffset})`). A cue-sheet track's position in its
+    file is `$song->offset`, a separate field, so a cue track started normally reads startOffset 0.
+    (Fourth review, 2026-09-21: checked and cleared.)
+  VERIFIED LIVE 2026-09-21 on 1.0.11, HQPlayer (ManCave), local FLAC, *It Goes On*: track 1 recorded as a
+  track entry; paused 9s into track 2, server restarted, resumed from Now Playing: the queue survived (2 of
+  11), track 2 restarted FROM THE TOP, counted at 2:36 and JOINED the entry (now one album entry, no
+  separate track 2 entry). NOT exercised live: the startOffset path. On this player a local track restarted
+  from the top too, so "local resumes where it stopped" is unconfirmed here (maybe real players or
+  LMS's auto-resume on reconnect only). A stop/clear seen before
   the first newsong does NOT cancel the restore: what LMS sends around a restart is unmeasured, and
   the gap decides. Known limit, accepted: restart, then within 30 min deliberately play the track
   that was last recorded = not counted. Guard: `tools/t_tracker.pl` "restart" block (10 red on the
   old Tracker; the gap and other-player controls stay green). UNVERIFIED LIVE: whether a resume fires
   `newsong` and at what offset. The suite covers both an offset and a restart from the top.
+- **THE SERVICE NAMES ITS TRACK — fixed 2026-09-21, asked for by Simon.** Live: three Qobuz rows read
+  "Pylon by beabadoobee from Pylon by beabadoobee from Pylon". Writer: LMS stores the name of the row a
+  track was started from as its title (`Commands.pm` playlist play: `Slim::Music::Info::setTitle($url,
+  $title)`, LMS 9.1 source), and `describe` preferred `$track->title` for a service track. A favourite
+  track or one of OUR OWN track rows (`_trackName`, since 1.0.4) is named "Title by Artist from Album", so a
+  replay from the history recorded that whole name as the title. Fix: the handler's title first, `$track->title`
+  as the fallback. Stations are unchanged: they are deliberately named from `$track->title`. Existing bad rows:
+  Simon removes his three by hand; a repair migration was offered and DECLINED. Guard: `t_tracker.pl`
+  "service title" (2 red on the old order) + a no-handler-title control.
 - **NO BACK-FILL FROM LMS — declined by Simon, 2026-09-18.** An import from LMS's persistent DB
   was offered: `tracks_persistent` holds only ONE `lastplayed` + a `playcount` per LIBRARY track
   (no player, no earlier plays, almost certainly no streaming or radio), so it could only rebuild a
