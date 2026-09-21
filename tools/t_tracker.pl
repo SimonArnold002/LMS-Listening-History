@@ -336,6 +336,22 @@ is('restart mid-album: still an album', $e->[0]{kind}, 'album');
 is('restart mid-album: the resumed track is not counted twice', $e->[0]{tracks_played}, 4);
 is('restart mid-album: plays logged once each', urlsOf($e->[0]{id}), '1,2,3,4');
 
+# Resumed part way through a track not yet counted: the mark is set for what is LEFT to hear,
+# or the track ends before the mark and a track heard in full is never recorded.
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2), listen => 0);     # down at 80% of track 2
+restart();
+$kitchen->{song}    = bless { duration => 200, track => libTrack(10, 2) }, 'FakeSong';
+$kitchen->{elapsed} = 160;                        # LMS resumes it where it stopped
+event($kitchen, 'newsong');
+my $due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('resumed at 80%: the mark is due before the track ends (40s left)', $due <= 40);
+$kitchen->{elapsed} = 195;
+Slim::Utils::Timers::fire_timer($kitchen) if $due <= 40;
+play($kitchen, libTrack(10, 3));
+is('resumed at 80%: the resumed track is recorded', urlsOf(entries()->[0]{id}), '1,2,3');
+
 # A long track counted before the restart and heard again after it: the gap runs from the
 # resume, not from the count before the restart, or the album splits again.
 fresh();

@@ -98,7 +98,10 @@ sub _onChange {
         station    => $station,
         remote     => $remote,
     };
-    my $wait = $info->{target} > 0 ? $info->{target} : FALLBACK_SECS;
+    # Arm for what is LEFT to hear: a track resumed part way through (after a restart) ends
+    # before a full-length wait. Arriving early costs nothing, _markTick re-checks progress.
+    my $played = eval { $client->songElapsedSeconds } || 0;
+    my $wait = $info->{target} > 0 ? $info->{target} - $played : FALLBACK_SECS;
     $wait = 5 if $wait < 5;
     $pending{$cid} = $info;
     Slim::Utils::Timers::setTimer($client, time() + $wait, \&_markTick, $info);

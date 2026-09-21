@@ -237,7 +237,12 @@ can be DISPROVEN. Closing a round is not a suppression.
   its plays) with `resumed_url` = the last play's url. `_record` drops the first counted play if it is
   that url, then forgets it, so a deliberate replay afterwards still counts. Dropping it also sets
   `last_at` to now (review 2026-09-21: without it a long track resumed after a restart split the album
-  again, the gap measured from the count BEFORE the restart; guard: "restart in a long track", 2 red without it). A stop/clear seen before
+  again, the gap measured from the count BEFORE the restart; guard: "restart in a long track", 2 red without it).
+  1.0.10 (second review, 2026-09-21): `_onChange` arms the mark for `target - songElapsedSeconds`, not the full
+  target. A track resumed at 80% ended before a full-length wait, so a track heard in full was never recorded
+  (older than this fix, made common by restarts). Early is harmless: `_markTick` re-checks progress and re-arms.
+  Guard: "resumed at 80%", 2 red without it. Corrects the earlier claim that an already-counted track resumed
+  near its end is counted again: it ends before the mark; only a resume FROM THE TOP could double-count. A stop/clear seen before
   the first newsong does NOT cancel the restore: what LMS sends around a restart is unmeasured, and
   the gap decides. Known limit, accepted: restart, then within 30 min deliberately play the track
   that was last recorded = not counted. Guard: `tools/t_tracker.pl` "restart" block (10 red on the
