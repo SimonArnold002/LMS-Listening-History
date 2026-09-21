@@ -315,4 +315,106 @@ $e = entries();
 is('removed mid-album: the next track starts a new entry', scalar @$e, 1);
 is('removed mid-album: as a track, with its own title', $e->[0]{title}, 'T2');
 
+# --- a server restart: the session is rebuilt from the database ---------------------------
+# restart() is what a server restart does to the tracker: its memory goes, the database stays.
+sub restart {
+    Slim::Utils::Timers::clear();
+    Plugins::ListeningHistory::Tracker->shutdown();
+    Plugins::ListeningHistory::Tracker->init();
+    ($CB) = map { $_->[0] } @Slim::Control::Request::SUBSCRIBED;
+}
+sub urlsOf { join ',', map { $_->{url} =~ m{/(\d+)\.flac$} ? $1 : $_->{url} } @{ Plugins::ListeningHistory::DB::plays($_[0]) } }
+
+fresh();
+play($kitchen, libTrack(10, $_)) for 1 .. 3;
+restart();
+play($kitchen, libTrack(10, 3));                  # resumed from Now Playing, already counted
+play($kitchen, libTrack(10, 4));
+$e = entries();
+is('restart mid-album: still ONE entry', scalar @$e, 1);
+is('restart mid-album: still an album', $e->[0]{kind}, 'album');
+is('restart mid-album: the resumed track is not counted twice', $e->[0]{tracks_played}, 4);
+is('restart mid-album: plays logged once each', urlsOf($e->[0]{id}), '1,2,3,4');
+
+# A long track counted before the restart and heard again after it: the gap runs from the
+# resume, not from the count before the restart, or the album splits again.
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2), duration => 1500);
+restart();
+TestClock::advance(20 * 60);                      # restart time, then 20 minutes of track 2 again
+play($kitchen, libTrack(10, 2), duration => 1500);
+TestClock::advance(20 * 60);
+play($kitchen, libTrack(10, 3));
+$e = entries();
+is('restart in a long track: the next track still joins the album', scalar @$e, 1);
+is('restart in a long track: three tracks, the resumed one once', urlsOf($e->[0]{id}), '1,2,3');
+
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2));
+play($kitchen, libTrack(10, 3), listen => 0);     # down at half way through track 3
+restart();
+play($kitchen, libTrack(10, 3));
+$e = entries();
+is('restart before the track counted: it joins the album', scalar @$e, 1);
+is('restart before the track counted: and IS counted', urlsOf($e->[0]{id}), '1,2,3');
+
+fresh();
+play($kitchen, libTrack(10, 1));
+restart();
+play($kitchen, libTrack(10, 1));
+is('restart on a single track: not counted twice', scalar @{ entries() }, 1);
+play($kitchen, libTrack(10, 2));
+$e = entries();
+is('restart on a single track: the next one makes it an album', $e->[0]{kind}, 'album');
+is('restart on a single track: of two', $e->[0]{tracks_played}, 2);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+restart();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 1));                  # played again on purpose
+is('restart: only the FIRST play is taken as the resume, a replay still counts', scalar @{ entries() }, 2);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2));
+restart();
+play($kitchen, libTrack(20, 1));                  # something else entirely
+$e = entries();
+is('restart then another album: a new entry', scalar @$e, 2);
+is('restart then another album: the old one is untouched', $e->[1]{tracks_played}, 2);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2));
+restart();
+play($kitchen, libTrack(10, 3));
+event($kitchen, 'stop');
+play($kitchen, libTrack(10, 4));
+$e = entries();
+is('restart then stop: the stop still ends the session', scalar @$e, 2);
+is('restart then stop: the album carried on before it', $e->[1]{tracks_played}, 3);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+TestClock::advance(2 * 3600);
+restart();
+play($kitchen, libTrack(10, 1));
+is('CONTROL restart after the gap: a new listen', scalar @{ entries() }, 2);
+
+fresh();
+play($kitchen, libTrack(10, 1));
+restart();
+play($lounge, libTrack(10, 1));
+is('restart: another player does not carry on Kitchen\'s entry', scalar @{ entries() }, 2);
+
+fresh();
+play($kitchen, $station, duration => 0);
+restart();
+play($kitchen, $station, duration => 0);
+Slim::Utils::Timers::fire_timer($kitchen);
+is('restart on radio: the station is not logged again', scalar @{ entries() }, 1);
+
 main::done();

@@ -11,7 +11,8 @@ Skin preferred. Built 2026-09-18 from Simon's brief, in the shape of Listen Late
 
 ## Branches and releasing
 - **1.0.4 is the first release**: merged to `main` and tagged `v1.0.4` on 2026-09-19. **1.0.5** (year search,
-  By date years) released and tagged `v1.0.5` the same day.
+  By date years) released and tagged `v1.0.5` the same day. **1.0.7** (By release by type, Qobuz `epmini`)
+  released and tagged `v1.0.7` the same day.
 - Work happens on `dev`. `dev` mirrors `main` except for ONE line, the `repo.xml` `<url>`:
   - main: `https://simonarnold002.github.io/LMS-Listening-History/ListeningHistory.zip` (Pages)
   - dev: `https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/dev/ListeningHistory.zip`
@@ -49,6 +50,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | `entryRow` text: Album over Artist (a track: one line "Title by Artist from Album", 1.0.4), no count / player / time on the row; `_when`, `PLUGIN_LH_TRACKS_OF`, `PLUGIN_LH_FROM` removed | **DECIDED by Simon 2026-09-19** | `A ROW READS LIKE A RELEASE` |
 | `_titled`: web-skin `name` = "Album by Artist", Material gets `line1` over `line2` | **DECIDED by Simon 2026-09-19** (1.0.2 review) | `THE WEB SKINS KEEP THE ARTIST IN THE NAME` |
 | `_trackName`: a single-track row is ONE line "Title by Artist from Album", as LMS names a favourite track | **DECIDED by Simon 2026-09-19** | `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE` |
+| restart carry-on `Tracker::_restore`, `resumed_url`: first newsong per player after startup rebuilds the session from its last entry (within `session_gap_min`); the first counted play is dropped if it is the last play's url | **ASKED FOR by Simon 2026-09-21**; UNVERIFIED LIVE | `A RESTART IS NOT A NEW LISTEN` |
 | back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
 | app/shelf logo `ListeningHistoryIcon` = Google `music_history`, not Material's `history` glyph | **KEPT by Simon 2026-09-18** | `THE LOGO STAYS` |
 | "More by this artist" context entry | DROPPED at build; By artist covers it | `MORE BY THIS ARTIST` |
@@ -227,6 +229,20 @@ can be DISPROVEN. Closing a round is not a suppression.
   Guard: `tools/t_browse.pl` (album line2 is EXACTLY the artist; a track and a station have none; a service track's
   name carries no service, player or time; By album: album/artist, latest play's badge, library control), anti-tested
   (a tail on line2: 3 red; "Artist – Album" name: red; oldest play badged: 1 red; tile badge dropped: 1 red).
+- **A RESTART IS NOT A NEW LISTEN — asked for by Simon, 2026-09-21.** Reported: after a server restart,
+  resuming from Now Playing logged the play twice. Cause: `%session` / `%pending` are memory only, so
+  the resumed album became a second entry and a track counted before the restart was counted again.
+  Fix: `Tracker::_restore` runs on the FIRST newsong per player after `init` (`%restored`), reads
+  `DB::forPlayer($cid, 1)` and, if it ended within `session_gap_min`, rebuilds the session (urls from
+  its plays) with `resumed_url` = the last play's url. `_record` drops the first counted play if it is
+  that url, then forgets it, so a deliberate replay afterwards still counts. Dropping it also sets
+  `last_at` to now (review 2026-09-21: without it a long track resumed after a restart split the album
+  again, the gap measured from the count BEFORE the restart; guard: "restart in a long track", 2 red without it). A stop/clear seen before
+  the first newsong does NOT cancel the restore: what LMS sends around a restart is unmeasured, and
+  the gap decides. Known limit, accepted: restart, then within 30 min deliberately play the track
+  that was last recorded = not counted. Guard: `tools/t_tracker.pl` "restart" block (10 red on the
+  old Tracker; the gap and other-player controls stay green). UNVERIFIED LIVE: whether a resume fires
+  `newsong` and at what offset. The suite covers both an offset and a restart from the top.
 - **NO BACK-FILL FROM LMS — declined by Simon, 2026-09-18.** An import from LMS's persistent DB
   was offered: `tracks_persistent` holds only ONE `lastplayed` + a `playcount` per LIBRARY track
   (no player, no earlier plays, almost certainly no streaming or radio), so it could only rebuild a
