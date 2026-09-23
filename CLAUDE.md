@@ -290,7 +290,9 @@ can be DISPROVEN. Closing a round is not a suppression.
   restart in some circumstances.** No code change: that is the startOffset path, built for it.
   1.0.15: `resumed_title` too. Radio Paradise plays every song on ONE url, so the url alone dropped the
   first NEW song after a restart; the drop now needs the title to match as well (a play with no title
-  still matches on the url). Guard: "RP restart" (red on 1.0.14) + "CONTROL RP restart" (same song).
+  still matches on the url). Review of 1.0.15: the title decides ONLY where `Sources::sharesUrl` (the
+  handler's `isRepeatingStream`) says the url is shared; everywhere else the url alone decides, as in
+  1.0.14, because a service track's title can fall back to LMS's row name just after a restart. Guard: "RP restart" (red on 1.0.14) + "CONTROL RP restart" (same song).
   1.0.15 also moves the startOffset into `$info->{from}` (see `A PAUSE IS NOT A GAP`); the target is
   recomputed at every check and `from` comes off it. A stop/clear seen before
   the first newsong does NOT cancel the restore: what LMS sends around a restart is unmeasured, and
@@ -335,6 +337,10 @@ can be DISPROVEN. Closing a round is not a suppression.
   (each only if it was before the pause), so the pause is out of the gap. A newsong on the paused url with a
   NON-station mark pending is the re-stream: the mark is kept, `from` = `startOffset`, re-armed for
   `_owed` = target - from. Paused after the count: the re-stream is ignored (still that one play).
+  Review of 1.0.15: ONLY when the new stream starts where it paused (`abs(startOffset - pos) <=
+  RESUME_SLACK` (3s), `pos` = `_position` at the pause: `controller->playingSongElapsed`, LMS's own resume
+  time). A seek made while paused starts elsewhere and takes the normal path (so would a shared-url stream's
+  next song, from 0; Radio Paradise itself refuses pause, `canDoAction`).
   A seek (no pause before it) is unchanged: the whole 90% is owed (pinned by two CONTROLs).
   Accepted: time paused never counts towards the gap, so pause at night, press play next day = one listen.
   Guard: `t_tracker.pl` "a pause stops the session clock" (streaming resume, resume after the count, local
@@ -400,6 +406,18 @@ can be DISPROVEN. Closing a round is not a suppression.
     present), the home shelf, and the search row.
 
 ### C. CLOSED FINDINGS
+
+**Review round 2026-09-23 (`874e991`, 1.0.15, /code-review) — CLOSED, three findings, all FIXED (uncommitted).**
+
+| # | finding | disposition |
+|---|---|---|
+| 1 | a seek made WHILE PAUSED was taken for the resume: its startOffset came off the target, so 10s + the last 30s counted | FIXED: resume only if the re-stream starts within `RESUME_SLACK` of the pause position (`_position`) |
+| 2 | the restart drop needed a title match for EVERY service: a Qobuz/Spotty title falling back to the row name after a restart counted the resumed track twice | FIXED: title compared only where `Sources::sharesUrl` (isRepeatingStream) |
+| 3 | Radio Paradise: Next pressed while paused, after song A counted, was ignored as "the rest of A" (same url) | PROBABLY UNREACHABLE: RP 3.6.6 `canDoAction` refuses `pause` (and `rew`). Covered anyway by #1's position check (a new song starts at 0); the test pins the branch, not a live path |
+
+Guards: `t_tracker.pl` "review of 1.0.15" block, 5 red on `874e991`. Writers: #1 LMS `time` while paused
+(`_JumpToTime`); #2 needs the handler to have no title just after startup, NOT seen live; #3 none found (RP
+refuses pause).
 
 **Review rounds 2026-09-21 (1.0.8 → 1.0.14, five inline rounds, committed on dev through `0053471`, unpushed) —
 ALL CLOSED.** Six findings, five FIXED, one DECLINED. Details in `docs/VERSION-HISTORY.md` 1.0.8–1.0.14.

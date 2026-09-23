@@ -48,6 +48,9 @@ my $prefs = preferences('plugin.listeninghistory');
 
 # Listen time when a track or stream reports no length.
 use constant FALLBACK_SECS => 60;
+# How far a re-stream may start from the pause point and still be the resume (LMS seeks to the
+# pause position, give or take the codec's seek granularity).
+use constant RESUME_SLACK => 3;
 
 my %pending;   # per player: { client, url, target, from, started_at, station, remote }
 my %session;   # per player: { entry_id, kind, album_key, url, urls => {}, last_at, resumed_url, resumed_title }
@@ -84,7 +87,8 @@ sub _onChange {
     # ['playlist', 'pause', 1|0] (StreamingController _Pause / _Resume, LMS 9.1).
     if ($request->isCommand([['playlist'], ['pause']])) {
         if ($request->getParam('_newvalue')) {
-            $paused{$cid} ||= { at => time(), url => eval { $client->playingSong->track->url } };
+            $paused{$cid} ||= { at => time(), url => eval { $client->playingSong->track->url },
+                                pos => _position($client) };
         }
         else {
             _unpause($cid);
@@ -103,12 +107,17 @@ sub _onChange {
     # A paused REMOTE track is not resumed in place: once the player's buffer is full LMS stops
     # fetching (_CheckPaused), and the resume is a new stream from the pause point (_JumpOrResume
     # -> _JumpToTime), which sends a newsong on the same url and sends no ['playlist','pause',0].
-    # It is the same listen: keep its mark, less what was heard before the pause.
+    # It is the same listen: keep its mark, less what was heard before the pause. Only when the new
+    # stream starts WHERE IT PAUSED: a seek made while paused, or the next song on a stream that
+    # plays every song on one url (Radio Paradise, skipped while paused), starts somewhere else.
     my $wasPaused = _unpause($cid);
     my $p = $pending{$cid};
-    if ($wasPaused && defined $wasPaused->{url} && $wasPaused->{url} eq $url) {
+    my $from = eval { $song->startOffset } || 0;
+    if ($wasPaused && defined $wasPaused->{url} && $wasPaused->{url} eq $url
+        && defined $wasPaused->{pos} && abs($from - $wasPaused->{pos}) <= RESUME_SLACK)
+    {
         if ($p && $p->{url} eq $url && !$p->{station}) {
-            $p->{from} = eval { $song->startOffset } || 0;
+            $p->{from} = $from;
             eval { Slim::Utils::Timers::killTimers($client, \&_markTick) };
             _arm($client, $p, _owed($p) || FALLBACK_SECS);
             return;
@@ -160,6 +169,15 @@ sub _arm {
     $pending{ $client->id } = $info;
     Slim::Utils::Timers::setTimer($client, time() + $wait, \&_markTick, $info);
     return;
+}
+
+# Where in the track the player is, in seconds: LMS's own position (what _Pause stores as the
+# resume time), else the stream's start point plus its elapsed.
+sub _position {
+    my ($client) = @_;
+    my $pos = eval { $client->controller->playingSongElapsed };
+    return $pos if defined $pos;
+    return (eval { $client->playingSong->startOffset } || 0) + (eval { $client->songElapsedSeconds } || 0);
 }
 
 # Stream seconds still owed before the mark counts: the target, less what was heard before this
@@ -280,13 +298,16 @@ sub _record {
     }
 
     # The first play counted after a restart: the track that was playing when it went down is
-    # resumed, and it may already be recorded. Only this one play is checked. The title too: Radio
-    # Paradise plays every song on one url, and a different song there is a new play.
+    # resumed, and it may already be recorded. Only this one play is checked. On a stream that plays
+    # every song on ONE url (Radio Paradise) the title decides too: a different song there is a new
+    # play. Nowhere else: a service track's title can fall back to LMS's row name just after a
+    # restart, and a mismatch there would count the resumed track twice.
     if (my $s = $session{$cid}) {
         my $resumed = delete $s->{resumed_url};
         my $rtitle  = delete $s->{resumed_title};
         if (defined $resumed && $resumed eq $d->{url}
-            && (!defined $rtitle || !defined $d->{title} || $rtitle eq $d->{title}))
+            && (!defined $rtitle || !defined $d->{title} || $rtitle eq $d->{title}
+                || !Plugins::ListeningHistory::Sources::sharesUrl($d->{url}, $song)))
         {
             $s->{last_at} = time();   # still this listen: the gap runs from here, not from before the restart
             $log->info("Listening History: not recording $d->{url} again, resumed after a restart");

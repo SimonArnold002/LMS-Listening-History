@@ -641,6 +641,8 @@ ok('no length yet: still timed', scalar @Slim::Utils::Timers::ARMED);
 # Radio Paradise plays every song on ONE url (isRepeatingStream). Each song is a clone with no
 # length of its own, so LMS's song length at newsong is the PREVIOUS song's; RP's handler has the
 # right one. A song shorter than 90% of the one before was never recorded.
+# RP's handler says so: isRepeatingStream (RP 3.6.6 ProtocolHandler).
+{ no warnings 'once'; *TestHandler::isRepeatingStream = sub { (eval { $_[1]->track->url } // '') =~ /^radioparadise:/ ? 1 : 0 }; }
 fresh();
 my $rpUrl = 'radioparadise://4.flac';
 sub rpSong {
@@ -687,6 +689,47 @@ rpSong('Same', 200, 200);
 $kitchen->{elapsed} = 190;
 Slim::Utils::Timers::fire_timer($kitchen);
 is('CONTROL RP restart: the same song resumed is not counted twice', scalar @{ entries() }, 1);
+
+# --- review of 1.0.15 (2026-09-23) -------------------------------------------------------------
+# A seek made WHILE PAUSED is also a new stream on the paused url, but not from the pause point:
+# it is a seek, and the whole 90% is still owed.
+fresh();
+play($kitchen, qp(1), listen => 0);
+$kitchen->{elapsed} = 10;
+pause($kitchen);
+$kitchen->{song}{startOffset} = 170;              # dragged to 170s of 200, then play
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('seek while paused: the mark is not shortened', $due > 100);
+$kitchen->{elapsed} = 25;                         # plays out the last 30s
+Slim::Utils::Timers::fire_timer($kitchen);
+is('seek while paused: 10s + the last 30s is not a listen', scalar @{ entries() }, 0);
+
+# Radio Paradise skipped while paused: the next song is a newsong on the SAME url, starting at 0.
+# It is a new song, not the rest of the one already counted.
+fresh();
+rpSong('A', 200, 0);
+$kitchen->{elapsed} = 190;
+Slim::Utils::Timers::fire_timer($kitchen);
+pause($kitchen);
+rpSong('B', 200, 200);                            # Next, pressed while paused
+ok('RP skip while paused: the next song is timed', scalar @Slim::Utils::Timers::ARMED);
+$kitchen->{elapsed} = 185;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('RP skip while paused: both songs recorded', join(',', map { $_->{title} } reverse @{ entries() }), 'A,B');
+
+# The restart title check is ONLY for a stream that shares one url. A service track whose title
+# falls back to LMS's row name just after a restart is still the resumed track: dropped on its url.
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = { 'qobuz://r1.flac' =>
+    { title => 'R1', artist => 'R Band', album => 'R Album', albumId => 'qr1', duration => 200 } };
+play($kitchen, remoteTrack(url => 'qobuz://r1.flac', title => 'R1 by R Band from R Album'));
+restart();
+delete $Slim::Player::ProtocolHandlers::META{qobuz}{'qobuz://r1.flac'}{title};   # no handler title yet
+play($kitchen, remoteTrack(url => 'qobuz://r1.flac', title => 'R1 by R Band from R Album'));
+is('restart, service title not ready: the resumed track is not counted twice', scalar @{ entries() }, 1);
+
 delete $Slim::Player::ProtocolHandlers::META{radioparadise};
 
 main::done();

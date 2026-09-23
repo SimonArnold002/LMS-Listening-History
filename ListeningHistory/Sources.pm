@@ -123,6 +123,15 @@ sub _str {
 
 sub _first { for (@_) { my $s = _str($_); return $s if defined $s } return undef }
 
+# Does this url play song after song on ONE url? LMS's own test: the handler's isRepeatingStream
+# (Radio Paradise). There the url does not identify a song, the title does.
+sub sharesUrl {
+    my ($url, $song) = @_;
+    my $handler = eval { Slim::Player::ProtocolHandlers->handlerForURL($url) } or return 0;
+    return 0 unless $handler->can('isRepeatingStream');
+    return eval { $handler->isRepeatingStream($song) } ? 1 : 0;
+}
+
 # The playing track's length in seconds, 0 if unknown. For a REMOTE track the protocol handler's
 # figure comes first: it describes the song playing now, where the song's own can be missing (a
 # queued streaming track the service has not described yet) or stale (Radio Paradise plays every

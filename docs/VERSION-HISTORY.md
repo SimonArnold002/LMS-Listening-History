@@ -259,4 +259,8 @@ Four reports from Simon, one build. Ledger: `A PAUSE IS NOT A GAP`, `THE LENGTH 
 - Tests: `t_tracker` 98 → 123 (shuffle, pause ×10, length ×2, RP ×6, radio rewritten); `t_browse` 154 (the
   checkbox test replaced by a pref-gone check). 18 red on 1.0.14; mutations each red (clock shift 8, length
   order 7, title check, mark kept 2). Totals 380.
-- Zip sha `de3bf3ec9504a50f0a9095f1a3f210103de5fb0f`. CHANGELOG / README wait for the merge to `main`.
+- Review of 1.0.15 (same day, rebuilt at 1.0.15: never pushed or installed): a seek made while paused was taken
+  for the resume (now only a re-stream within `RESUME_SLACK` 3s of the pause position is); the restart title
+  check applied to every service (now only `Sources::sharesUrl`, i.e. isRepeatingStream); an RP skip while paused
+  (RP refuses pause, probably unreachable) is covered by the first. `t_tracker` 123 → 128, `t_load` 47; totals 386.
+- Zip sha `cfdcde49c42c9904c9297868ceb7323bf7a854a5` (first build `de3bf3ec…`). CHANGELOG / README wait for the merge to `main`.
