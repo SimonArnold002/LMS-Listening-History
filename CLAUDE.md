@@ -393,8 +393,9 @@ can be DISPROVEN. Closing a round is not a suppression.
   second track. Still OPEN: a Qobuz track replayed from a favourite or history row records its plain title.
   The `startOffset` resume path is unexercised live. These specific paths have not been checked individually and are covered by
   the suites only:
-  - 1.0.15 (built 2026-09-23, not yet installed): the pause re-stream, the pause clock, the per-check length
-    (RP songs, a queued streaming track), the RP restart title check. Checks for Simon: pause a Qobuz album
+  - 1.0.15 (built 2026-09-23, reviewed once, committed on dev `874e991` + `d46604c`, zip `cfdcde49…`; NOT
+    pushed, NOT installed): the pause re-stream (only from the pause position), the pause clock, the per-check
+    length (RP songs, a queued streaming track), the RP-only restart title check. Checks for Simon: pause a Qobuz album
     mid-track for 40+ min and resume (one entry, the paused track in it); a Radio Paradise hour (every song
     heard to 90% appears); a local album with a Qobuz album queued after it (no streaming row before its
     first track reaches 90%).
@@ -404,6 +405,15 @@ can be DISPROVEN. Closing a round is not a suppression.
   - That `newsong` fires on radio title changes with the same url (assumed, and guarded either way).
   - Material rendering of the tiles (`_MTL_icon_` names checked against MaterialIcons.ttf: all
     present), the home shelf, and the search row.
+
+- **README / CHANGELOG lag 1.0.15 until the merge to `main` (fleet rule, not a finding).** At the merge,
+  README.md (then README.html / index.html) must change: the intro "plus internet radio" (line ~3); the
+  "Plays again" row "or the radio station" (~17); the "Radio too" row (~21); "pause it and the count simply
+  waits" should add that a pause of any length keeps an album together (~49); the Radio bullet (~53) becomes
+  "radio stations are not recorded; Radio Paradise is recorded song by song"; "Radio: the station's name"
+  (~73) and "Radio: plays the station" (~93) apply only to rows recorded before 1.0.15; the "Album session gap"
+  setting (~104) is the time between tracks NOT counting a pause; the "Record internet radio" setting row
+  (~105) is removed; "Radio detection is by stream type" (~114). CHANGELOG: one entry for the release.
 
 ### C. CLOSED FINDINGS
 

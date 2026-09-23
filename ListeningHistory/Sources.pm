@@ -243,8 +243,9 @@ sub describe {
         $d{is_station} = isStation($source, $d{duration}, 1);
 
         if ($d{is_station}) {
-            # A station row is named after the STATION, which is what the track title holds
-            # for a stream (the menu title); the handler's title is the now-playing song.
+            # A station is named after the STATION, which is what the track title holds for a
+            # stream (the menu title); the handler's title is the now-playing song. Stations are
+            # not recorded since 1.0.15: the name is for Tracker's log line and old station rows.
             $d{title}  = _first(eval { $track->title }, $meta->{title}, $url);
             $d{artist} = undef;
             $d{album}  = undef;
