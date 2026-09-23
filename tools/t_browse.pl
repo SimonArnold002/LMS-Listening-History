@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 # Browse.pm, the context menu, and Settings: the shelf's shape and size, what each row type
 # is, how an album row resolves (whole album vs the recorded tracks), search dispatch, and
-# the checkbox that must be able to turn off.
+# the settings clamps.
 use strict;
 use warnings;
 use FindBin;
@@ -401,12 +401,11 @@ my $do = $req->{loop}[0]{actions}{do};
 Plugins::ListeningHistory::Plugin::_removeCommand(FakeReq->new($do->{params}));
 is('remove command: the row is gone', Plugins::ListeningHistory::DB::get($trk), undef);
 
-# --- settings: an unticked checkbox turns the pref off ------------------------------------------------------
-Slim::Utils::Prefs::set_test_pref('plugin.listeninghistory', record_radio => 1);
+# --- settings: the numbers are clamped; radio is no longer a setting (1.0.15) ---------------------------------
 Plugins::ListeningHistory::Settings->handler(undef, { saveSettings => 1, pref_played_threshold => '250',
     pref_session_gap_min => 'x', pref_retention_days => '14' });
 my $p = Slim::Utils::Prefs::preferences('plugin.listeninghistory');
-is('settings: unticked record_radio stores 0, not undef', $p->get('record_radio'), 0);
+ok('settings: record_radio is gone from the page', !grep { $_ eq 'record_radio' } (Plugins::ListeningHistory::Settings->prefs)[1 .. 3]);
 is('settings: threshold clamped to 100', $p->get('played_threshold'), 100);
 is('settings: junk gap falls back to 30', $p->get('session_gap_min'), 30);
 is('settings: retention kept', $p->get('retention_days'), 14);

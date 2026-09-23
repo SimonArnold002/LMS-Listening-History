@@ -34,7 +34,6 @@ my $prefs = preferences('plugin.listeninghistory');
 $prefs->init({
     played_threshold => 90,   # % of a track that must play before it is recorded
     session_gap_min  => 30,   # minutes between two tracks that still group into one album
-    record_radio     => 1,    # record internet radio stations
     retention_days   => 0,    # remove entries older than this; 0 keeps everything
     sort             => 'date', # entry-list order: date | artist | album (the view's sort row)
 });

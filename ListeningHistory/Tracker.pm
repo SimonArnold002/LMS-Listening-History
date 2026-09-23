@@ -13,8 +13,18 @@ package Plugins::ListeningHistory::Tracker;
 #   and every later one bumps its count. Anything else starts a new session with a TRACK
 #   entry. A stop or a cleared playlist ends the session.
 #
-#   A radio station is recorded ONCE per session, after 60s. The stream's title changes
-#   arrive as newsong events on the same url and are ignored.
+#   The track's LENGTH is read again at every check, the service's own figure first: a queued
+#   streaming track can start before its service knows the length, and Radio Paradise plays every
+#   song on ONE url, so at newsong LMS still holds the previous song's length.
+#
+#   A PAUSE stops the session clock: the time paused does not count towards session_gap_min.
+#   A paused streaming track is resumed by LMS as a new stream from the pause point, which
+#   arrives as a newsong on the same url. That is the same listen, not a new one: its mark stays,
+#   and what was heard before the pause comes off it.
+#
+#   Radio STATIONS are not recorded (Simon, 2026-09-23). A stream with no length is timed as one
+#   for 60s, in case it learns its length (a podcast, Radio Paradise's first song), and its title
+#   changes, newsong events on the same url, are ignored.
 #
 #   Sessions live in memory, so a server restart would forget them: the album being played
 #   would split in two when it is resumed, and a track already counted would be counted
@@ -39,12 +49,13 @@ my $prefs = preferences('plugin.listeninghistory');
 # Listen time when a track or stream reports no length.
 use constant FALLBACK_SECS => 60;
 
-my %pending;   # per player: { client, url, target, started_at, station }
-my %session;   # per player: { entry_id, kind, album_key, url, urls => {}, last_at, resumed_url }
+my %pending;   # per player: { client, url, target, from, started_at, station, remote }
+my %session;   # per player: { entry_id, kind, album_key, url, urls => {}, last_at, resumed_url, resumed_title }
 my %restored;  # per player: 1 once the first newsong since startup has rebuilt its session
+my %paused;    # per player: { at, url } while it is paused
 
 sub init {
-    Slim::Control::Request::subscribe(\&_onChange, [['playlist'], ['newsong', 'stop', 'clear']]);
+    Slim::Control::Request::subscribe(\&_onChange, [['playlist'], ['newsong', 'stop', 'clear', 'pause']]);
     $log->info('Listening History tracker subscribed');
     return;
 }
@@ -54,6 +65,7 @@ sub shutdown {
     _cancel($_) for keys %pending;
     %session  = ();
     %restored = ();
+    %paused   = ();
     return;
 }
 
@@ -65,6 +77,18 @@ sub _onChange {
     if ($request->isCommand([['playlist'], ['stop', 'clear']])) {
         _cancel($cid);
         delete $session{$cid};
+        delete $paused{$cid};
+        return;
+    }
+
+    # ['playlist', 'pause', 1|0] (StreamingController _Pause / _Resume, LMS 9.1).
+    if ($request->isCommand([['playlist'], ['pause']])) {
+        if ($request->getParam('_newvalue')) {
+            $paused{$cid} ||= { at => time(), url => eval { $client->playingSong->track->url } };
+        }
+        else {
+            _unpause($cid);
+        }
         return;
     }
 
@@ -76,9 +100,26 @@ sub _onChange {
     my $first = !$restored{$cid}++;
     _restore($cid) if $first;
 
-    # A radio stream announces each new song title as a newsong on the SAME url. That is
-    # not a new listen: keep the pending station mark, and never log the station twice.
+    # A paused REMOTE track is not resumed in place: once the player's buffer is full LMS stops
+    # fetching (_CheckPaused), and the resume is a new stream from the pause point (_JumpOrResume
+    # -> _JumpToTime), which sends a newsong on the same url and sends no ['playlist','pause',0].
+    # It is the same listen: keep its mark, less what was heard before the pause.
+    my $wasPaused = _unpause($cid);
     my $p = $pending{$cid};
+    if ($wasPaused && defined $wasPaused->{url} && $wasPaused->{url} eq $url) {
+        if ($p && $p->{url} eq $url && !$p->{station}) {
+            $p->{from} = eval { $song->startOffset } || 0;
+            eval { Slim::Utils::Timers::killTimers($client, \&_markTick) };
+            _arm($client, $p, _owed($p) || FALLBACK_SECS);
+            return;
+        }
+        # Already counted before the pause: the rest of it is still that one play.
+        my $s = $session{$cid};
+        return if $s && $s->{urls} && $s->{urls}{$url};
+    }
+
+    # A radio stream announces each new song title as a newsong on the SAME url. That is
+    # not a new listen: keep the pending station mark, and never time the station again.
     return if $p && $p->{station} && $p->{url} eq $url;
     my $s = $session{$cid};
     return if $s && ($s->{kind} // '') eq 'station' && ($s->{url} // '') eq $url;
@@ -95,28 +136,55 @@ sub _onChange {
         client     => $client,
         url        => $url,
         target     => $station ? 0 : _target($dur),
+        from       => 0,
         started_at => time(),
         station    => $station,
         remote     => $remote,
     };
-    # The first track after a restart may be resumed where it stopped (local files are; streams
-    # start again from the top). What came before the resume point was heard before the restart,
-    # so only the rest of the 90% is still owed. songElapsedSeconds counts from the start of the
-    # STREAM, not the track, so it is the resume point, startOffset, that comes off the target.
-    # Only here: a seek also starts a new stream and a newsong, and must still be listened through.
-    if ($first && $info->{target} > 0) {
-        my $from = eval { $song->startOffset } || 0;
-        if ($from > 0) {
-            $info->{target} -= $from;
-            $info->{target} = 1 if $info->{target} < 1;
-        }
-    }
+    # The first track after a restart may be resumed where it stopped (local files are, in some
+    # circumstances; streams start again from the top). What came before the resume point was
+    # heard before the restart, so only the rest of the 90% is still owed. songElapsedSeconds
+    # counts from the start of the STREAM, not the track, so it is the resume point, startOffset,
+    # that comes off the target. Only here and on a resume from pause (above): a seek also starts
+    # a new stream and a newsong, and must still be listened through.
+    $info->{from} = eval { $song->startOffset } || 0 if $first;
 
-    my $wait = $info->{target} > 0 ? $info->{target} : FALLBACK_SECS;
+    _arm($client, $info, _owed($info) || FALLBACK_SECS);
+    return;
+}
+
+# Arm (or re-arm) the player's mark $wait seconds from now.
+sub _arm {
+    my ($client, $info, $wait) = @_;
     $wait = 5 if $wait < 5;
-    $pending{$cid} = $info;
+    $pending{ $client->id } = $info;
     Slim::Utils::Timers::setTimer($client, time() + $wait, \&_markTick, $info);
     return;
+}
+
+# Stream seconds still owed before the mark counts: the target, less what was heard before this
+# stream started. 0 when there is no target (no length known).
+sub _owed {
+    my ($info) = @_;
+    return 0 unless ($info->{target} // 0) > 0;
+    my $owed = $info->{target} - ($info->{from} || 0);
+    return $owed < 1 ? 1 : $owed;
+}
+
+# End a pause: the session clock stood still while it lasted, so the last play and the pending
+# track's start move on by the time paused. Moving both keeps a pause INSIDE the pending track out
+# of the gap, and takes a pause BETWEEN tracks out of it. Returns the pause, or undef.
+sub _unpause {
+    my ($cid) = @_;
+    my $pz = delete $paused{$cid} or return undef;
+    my $held = time() - $pz->{at};
+    if ($held > 0) {
+        my $s = $session{$cid};
+        $s->{last_at} += $held if $s && defined $s->{last_at} && $s->{last_at} <= $pz->{at};
+        my $p = $pending{$cid};
+        $p->{started_at} += $held if $p && $p->{started_at} <= $pz->{at};
+    }
+    return $pz;
 }
 
 # Rebuild a player's session from its last entry, if that ended within the session gap.
@@ -135,8 +203,9 @@ sub _restore {
         album_key   => $e->{album_key},
         url         => $e->{url},
         urls        => { map { defined $_->{url} ? ($_->{url} => 1) : () } @$plays },
-        last_at     => $e->{played_at},
-        resumed_url => $plays->[-1]{url},
+        last_at       => $e->{played_at},
+        resumed_url   => $plays->[-1]{url},
+        resumed_title => $plays->[-1]{title},
     };
     $log->info("Listening History: carrying on entry $e->{id} ($e->{kind}) on $cid after a restart");
     return;
@@ -148,44 +217,41 @@ sub _markTick {
     my $cid = $client->id;
     delete $pending{$cid};
 
-    my $nowUrl = eval { $client->playingSong->track->url };
+    my $song   = eval { $client->playingSong };
+    my $nowUrl = eval { $song->track->url };
     return unless defined $nowUrl && $nowUrl eq $info->{url};
 
-    # Armed as a station because no length was known at newsong. A stream that has learnt its
-    # length since is a TRACK (a podcast episode, an http file): hand it to the 90% rule, or a
-    # skip one minute in would be recorded as played.
-    if ($info->{station}) {
-        my $dur = _duration($client, $client->playingSong, $info->{url}, $info->{remote});
-        if ($dur > 0) {
-            $info->{station} = 0;
-            $info->{target}  = _target($dur);
-        }
+    # The length again, at every check: the one read at newsong can be missing (a queued streaming
+    # track the service has not described yet) or stale (Radio Paradise: every song on one url, and
+    # LMS still holding the previous song's length). A stream armed as a station that has learnt a
+    # length is a TRACK (a podcast episode, an http file): hand it to the 90% rule, or a skip one
+    # minute in would be recorded as played.
+    my $dur = _duration($client, $song, $info->{url}, $info->{remote});
+    if ($dur > 0) {
+        $info->{station} = 0;
+        $info->{target}  = _target($dur);
+    }
+    elsif ($info->{remote} && !$info->{station} && !($info->{target} > 0)) {
+        # A service track, never a station, with no length yet: wait for one rather than count it
+        # at 60s. describe() refuses a service track with no length, so this is its only way in.
+        return _arm($client, $info, FALLBACK_SECS);
     }
 
     # Trust playback progress, not the wall clock: re-arm for the shortfall after a pause.
+    my $owed   = _owed($info);
     my $played = eval { $client->songElapsedSeconds } || 0;
-    if ($info->{target} > 0 && $played + 1 < $info->{target}) {
-        my $again = $info->{target} - $played;
-        $again = 5 if $again < 5;
-        $pending{$cid} = $info;
-        Slim::Utils::Timers::setTimer($client, time() + $again, \&_markTick, $info);
-        return;
-    }
+    return _arm($client, $info, $owed - $played) if $owed > 0 && $played + 1 < $owed;
 
     eval { _record($client, $info); 1 }
         or $log->error("Listening History: recording a play failed: $@");
     return;
 }
 
-# The track's length in seconds, 0 if unknown. The song's own, else the protocol handler's —
-# the same two sources, in the same order, that Sources::describe reads, so the timer here and
-# the record there agree about what is a station.
+# The track's length in seconds, 0 if unknown: Sources::trackDuration, the same figure describe()
+# records, so the timer here and the record there agree about what is a station.
 sub _duration {
     my ($client, $song, $url, $remote) = @_;
-    my $dur = eval { $song->duration } || 0;
-    return $dur if $dur > 0 || !$remote;
-    my $m = Plugins::ListeningHistory::Sources::playingMeta($client, $url)->{duration};
-    return (defined $m && !ref $m && $m =~ /^[\d.]+$/ && $m > 0) ? $m : 0;
+    return Plugins::ListeningHistory::Sources::trackDuration($client, $song, $url, $remote);
 }
 
 sub _target {
@@ -214,10 +280,14 @@ sub _record {
     }
 
     # The first play counted after a restart: the track that was playing when it went down is
-    # resumed, and it may already be recorded. Only this one play is checked.
+    # resumed, and it may already be recorded. Only this one play is checked. The title too: Radio
+    # Paradise plays every song on one url, and a different song there is a new play.
     if (my $s = $session{$cid}) {
         my $resumed = delete $s->{resumed_url};
-        if (defined $resumed && $resumed eq $d->{url}) {
+        my $rtitle  = delete $s->{resumed_title};
+        if (defined $resumed && $resumed eq $d->{url}
+            && (!defined $rtitle || !defined $d->{title} || $rtitle eq $d->{title}))
+        {
             $s->{last_at} = time();   # still this listen: the gap runs from here, not from before the restart
             $log->info("Listening History: not recording $d->{url} again, resumed after a restart");
             return;
@@ -230,20 +300,12 @@ sub _record {
         player_name => (eval { $client->name } // $cid),
     );
 
+    # Radio stations are not recorded (Simon, 2026-09-23: a continuous stream says nothing to find
+    # again later; Radio Paradise, which names each song, is recorded song by song as tracks). The
+    # station still ends the album session, and its later title changes are ignored.
     if ($d->{is_station}) {
-        return unless $prefs->get('record_radio');
-        my $id = Plugins::ListeningHistory::DB::addEntry({
-            %player,
-            kind      => 'station',
-            source    => 'radio',
-            title     => $d->{title},
-            artwork   => $d->{artwork},
-            url       => $d->{url},
-            album_key => $d->{album_key},
-            played_at => $now,
-        }, { url => $d->{url}, title => $d->{title}, played_at => $now }) or return;
-        $session{$cid} = { entry_id => $id, kind => 'station', url => $d->{url}, last_at => $now };
-        $log->info("Listening History: station '$d->{title}' on $player{player_name}");
+        $session{$cid} = { kind => 'station', url => $d->{url}, last_at => $now };
+        $log->info("Listening History: not recording station '$d->{title}' on $player{player_name}");
         return;
     }
 

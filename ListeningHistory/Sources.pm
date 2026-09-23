@@ -123,6 +123,21 @@ sub _str {
 
 sub _first { for (@_) { my $s = _str($_); return $s if defined $s } return undef }
 
+# The playing track's length in seconds, 0 if unknown. For a REMOTE track the protocol handler's
+# figure comes first: it describes the song playing now, where the song's own can be missing (a
+# queued streaming track the service has not described yet) or stale (Radio Paradise plays every
+# song as a clone on one url; the clone keeps no length of its own and reads the shared track's,
+# which RP's getMetadataFor only updates when asked, so at newsong it is the PREVIOUS song's).
+# $meta, the handler's metadata, when the caller already has it.
+sub trackDuration {
+    my ($client, $song, $url, $remote, $meta) = @_;
+    if ($remote) {
+        my $m = ($meta || playingMeta($client, $url))->{duration};
+        return $m + 0 if defined $m && !ref $m && $m =~ /^[\d.]+$/ && $m > 0;
+    }
+    return eval { $song->duration } || 0;
+}
+
 # The artist a group of tracks is keyed on. Services credit every artist on a track
 # ("Kygo, Khalid, Gryffin" from Spotty), so two tracks of one album can carry different
 # full credits; their FIRST credit agrees.
@@ -214,9 +229,7 @@ sub describe {
         my $y = $meta->{year};
         $d{year}    = $y if defined $y && !ref $y && $y =~ /^\d{4}$/;
         $d{artwork} = _first(@{$meta}{qw(cover image icon artwork_url)});
-        my $mdur    = $meta->{duration};
-        $d{duration} = $duration > 0 ? $duration
-                     : (defined $mdur && !ref $mdur && $mdur =~ /^[\d.]+$/ ? $mdur : 0);
+        $d{duration} = trackDuration($client, $song, $url, 1, $meta);
 
         $d{is_station} = isStation($source, $d{duration}, 1);
 

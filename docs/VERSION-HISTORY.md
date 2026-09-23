@@ -239,3 +239,24 @@ round's two fixes (CLAUDE.md §C):
   the handler's artist when its artist and title rejoin to the track's own title; a real stream artist is kept.
 - Tests: `t_tracker` 95 → 98. Totals 323 (start of 2026-09-21) → 355 (t_browse 154, t_db 57, t_load 46, t_tracker 98).
 - Zip sha `29fd895040cdcb5c83264fef54dcc9fa4a7cf5d5`. CHANGELOG / README wait for the merge to `main`.
+
+## 1.0.15 — 2026-09-23 (dev, uncommitted) — pauses, song lengths learnt late, radio
+
+Four reports from Simon, one build. Ledger: `A PAUSE IS NOT A GAP`, `THE LENGTH IS READ AT EVERY CHECK`,
+`RADIO IS NOT RECORDED`, `A RESTART IS NOT A NEW LISTEN`.
+- Pause: `Tracker` subscribes to `playlist pause`. The time paused no longer counts towards the session gap
+  (`_unpause`), and a paused streaming track that LMS re-streams from the pause point (a `newsong` on the same
+  url) keeps its mark, owing only what is left (`from` = `startOffset`, `_owed`). Was: Gia Margaret *Singing*
+  logged twice, the paused track in neither entry.
+- Length: `Sources::trackDuration` reads a remote track's length from its handler first; `_markTick` re-reads it
+  at every check and recomputes the target. A service track with no length yet waits rather than counting at
+  60s. Was: Radio Paradise songs shorter than 90% of the song before were never recorded (every song on one
+  url, LMS holding the previous length), and a queued streaming track with no length at its start was counted
+  at 60s.
+- Restart: the resumed-play drop also compares the title (`resumed_title`), for Radio Paradise's shared url.
+- Radio: stations are no longer recorded; `record_radio`, its settings row and three strings removed. Radio
+  Paradise is recorded song by song as before.
+- Tests: `t_tracker` 98 → 123 (shuffle, pause ×10, length ×2, RP ×6, radio rewritten); `t_browse` 154 (the
+  checkbox test replaced by a pref-gone check). 18 red on 1.0.14; mutations each red (clock shift 8, length
+  order 7, title check, mark kept 2). Totals 380.
+- Zip sha `de3bf3ec9504a50f0a9095f1a3f210103de5fb0f`. CHANGELOG / README wait for the merge to `main`.
