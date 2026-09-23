@@ -240,7 +240,7 @@ round's two fixes (CLAUDE.md §C):
 - Tests: `t_tracker` 95 → 98. Totals 323 (start of 2026-09-21) → 355 (t_browse 154, t_db 57, t_load 46, t_tracker 98).
 - Zip sha `29fd895040cdcb5c83264fef54dcc9fa4a7cf5d5`. CHANGELOG / README wait for the merge to `main`.
 
-## 1.0.15 — 2026-09-23 (dev, `874e991` onwards, unpushed) — pauses, song lengths learnt late, radio
+## 1.0.15 — 2026-09-23 (dev, `874e991` onwards, pushed; reviews closed) — pauses, song lengths learnt late, radio
 
 Four reports from Simon, one build. Ledger: `A PAUSE IS NOT A GAP`, `THE LENGTH IS READ AT EVERY CHECK`,
 `RADIO IS NOT RECORDED`, `A RESTART IS NOT A NEW LISTEN`.
@@ -269,5 +269,6 @@ Four reports from Simon, one build. Ledger: `A PAUSE IS NOT A GAP`, `THE LENGTH 
   was dropped as a station title change even when it had a length, so RP's first song taken for a station
   silenced every later one (older than 1.0.15). The station early-returns now apply only while the newsong
   itself has no length. `t_tracker` 128 → 134; totals 392. 4 red on `23bace0`.
+- Third review (same day): no findings; clearances logged in the ledger §C.
 - Zip sha `54b0ccb471fa49a96987c69a5b097556b4e6d59b` (earlier builds `de3bf3ec…`, `cfdcde49…`, all 1.0.15, none pushed or installed). CHANGELOG /
   README wait for the merge to `main`.

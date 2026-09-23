@@ -393,8 +393,8 @@ can be DISPROVEN. Closing a round is not a suppression.
   second track. Still OPEN: a Qobuz track replayed from a favourite or history row records its plain title.
   The `startOffset` resume path is unexercised live. These specific paths have not been checked individually and are covered by
   the suites only:
-  - 1.0.15 (built 2026-09-23; two review rounds + a full check, all CLOSED; committed on dev `874e991` →
-    the full-check commit, zip `54b0ccb4…`; NOT pushed, NOT installed): the pause re-stream (only from the pause position), the pause clock, the per-check
+  - 1.0.15 (built 2026-09-23, zip `54b0ccb4…`; three review rounds + a full check, ALL CLOSED; PUSHED to
+    `dev` 2026-09-23; NOT installed): the pause re-stream (only from the pause position), the pause clock, the per-check
     length (RP songs, a queued streaming track), the RP-only restart title check. Checks for Simon: pause a Qobuz album
     mid-track for 40+ min and resume (one entry, the paused track in it); a Radio Paradise hour (every song
     heard to 90% appears); a local album with a Qobuz album queued after it (no streaming row before its
@@ -416,6 +416,20 @@ can be DISPROVEN. Closing a round is not a suppression.
   (~105) is removed; "Radio detection is by stream type" (~114). CHANGELOG: one entry for the release.
 
 ### C. CLOSED FINDINGS
+
+**Third review round 2026-09-23 (`874e991~1..963a417`, /code-review) — CLOSED, NO findings.** Checked and
+CLEARED (do not re-derive): the station early-return moved below the resume branch still ignores a no-length
+title change, and a same-url song WITH a length re-arms as a track; an old `station` row rebuilt by `_restore`
+still suppresses its resumed station (which records nothing anyway). The resume credit `from += startOffset -
+base` is right for a restart mark (`from = base = S`), a mark with target 0 (falls to 60s) and two resumes in a
+row; `killTimers` then `_arm` leaves ONE timer. A podcast paused inside its first 60s, before it knows its length,
+is timed from the resume point (as before 1.0.15; rare). `_unpause`: a pause inside the pending track moves
+`started_at` and `last_at` together (gap unchanged), a pause between tracks moves only `last_at`, a lone `pause 0`
+is a no-op. A `deezerpodcast` / service track that never learns a length re-arms every 60s and is never recorded
+(describe refused it before 1.0.15 too). A station always ends the album session (deliberate, `_record`
+comment; 1.0.14 with `record_radio` off did not). In the restart check `$d->{title}` cannot be undef
+(describe refuses no title), and `sharesUrl` is asked only after url and title are compared. Nothing still
+reads `record_radio`, `PLUGIN_LH_RADIO*` or `PLUGIN_LH_ENABLED`.
 
 **Full check of 1.0.15 2026-09-23 (whole Tracker state machine walked by hand, after two review rounds) —
 one finding, FIXED, committed.** A same-url newsong was dropped as a station title change whenever the
