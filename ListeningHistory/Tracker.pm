@@ -52,10 +52,10 @@ use constant FALLBACK_SECS => 60;
 # pause position, give or take the codec's seek granularity).
 use constant RESUME_SLACK => 3;
 
-my %pending;   # per player: { client, url, target, from, started_at, station, remote }
+my %pending;   # per player: { client, url, target, from, base, started_at, station, remote }
 my %session;   # per player: { entry_id, kind, album_key, url, urls => {}, last_at, resumed_url, resumed_title }
 my %restored;  # per player: 1 once the first newsong since startup has rebuilt its session
-my %paused;    # per player: { at, url } while it is paused
+my %paused;    # per player: { at, url, pos } while it is paused
 
 sub init {
     Slim::Control::Request::subscribe(\&_onChange, [['playlist'], ['newsong', 'stop', 'clear', 'pause']]);
@@ -109,7 +109,8 @@ sub _onChange {
     # -> _JumpToTime), which sends a newsong on the same url and sends no ['playlist','pause',0].
     # It is the same listen: keep its mark, less what was heard before the pause. Only when the new
     # stream starts WHERE IT PAUSED: a seek made while paused, or the next song on a stream that
-    # plays every song on one url (Radio Paradise, skipped while paused), starts somewhere else.
+    # plays every song on one url, starts somewhere else. (Radio Paradise itself cannot pause: its
+    # handler refuses, and LMS stops it instead — StreamingController::pause.)
     my $wasPaused = _unpause($cid);
     my $p = $pending{$cid};
     my $from = eval { $song->startOffset } || 0;
@@ -117,7 +118,10 @@ sub _onChange {
         && defined $wasPaused->{pos} && abs($from - $wasPaused->{pos}) <= RESUME_SLACK)
     {
         if ($p && $p->{url} eq $url && !$p->{station}) {
-            $p->{from} = $from;
+            # Credit only what played since THIS mark's stream began (`base`): after a seek the
+            # stream began at the seek point, and what lies before it was never heard.
+            $p->{from} += $from - ($p->{base} // 0);
+            $p->{base}  = $from;
             eval { Slim::Utils::Timers::killTimers($client, \&_markTick) };
             _arm($client, $p, _owed($p) || FALLBACK_SECS);
             return;
@@ -127,25 +131,30 @@ sub _onChange {
         return if $s && $s->{urls} && $s->{urls}{$url};
     }
 
-    # A radio stream announces each new song title as a newsong on the SAME url. That is
-    # not a new listen: keep the pending station mark, and never time the station again.
-    return if $p && $p->{station} && $p->{url} eq $url;
-    my $s = $session{$cid};
-    return if $s && ($s->{kind} // '') eq 'station' && ($s->{url} // '') eq $url;
-
-    _cancel($cid);
-
     my $remote = eval { $track->can('remote') ? $track->remote : undef };
     $remote = ($url !~ m{^file:}i && $url =~ m{^\w+://}) ? 1 : 0 unless defined $remote;
     my $source  = $remote ? Plugins::ListeningHistory::Sources::sourceFromUrl($url) : 'library';
     my $dur     = _duration($client, $song, $url, $remote);
     my $station = Plugins::ListeningHistory::Sources::isStation($source, $dur, $remote);
 
+    # A radio stream announces each new song title as a newsong on the SAME url. That is not a new
+    # listen: keep the pending station mark, and never time the station again. Only while the url
+    # still has no length: a song WITH one is a track (Radio Paradise's next song, when its first
+    # was taken for a station because RP had not described it yet), or every later song is lost.
+    if ($station) {
+        return if $p && $p->{station} && $p->{url} eq $url;
+        my $s = $session{$cid};
+        return if $s && ($s->{kind} // '') eq 'station' && ($s->{url} // '') eq $url;
+    }
+
+    _cancel($cid);
+
     my $info = {
         client     => $client,
         url        => $url,
         target     => $station ? 0 : _target($dur),
-        from       => 0,
+        from       => 0,      # seconds credited before the current stream (a resume)
+        base       => eval { $song->startOffset } || 0,   # where the current stream began in the track
         started_at => time(),
         station    => $station,
         remote     => $remote,

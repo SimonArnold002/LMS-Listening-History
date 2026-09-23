@@ -38,7 +38,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | album vs track rule, `Tracker::_record`, promote on 2nd track | **DECIDED by Simon 2026-09-18**: 2+ back-to-back tracks = album | `2+ TRACKS = AN ALBUM` |
 | `played_threshold` 90%, 60s fallback | **DECIDED by Simon 2026-09-18**: Listen Later's rule | `THE 90% RULE` |
 | radio: stations NOT recorded, `record_radio` pref REMOVED; Radio Paradise recorded per song as tracks | **CHANGED by Simon 2026-09-23** (was a station row, 2026-09-18) | `RADIO IS NOT RECORDED` |
-| pause: `Tracker::_unpause` stops the session clock; a paused stream's re-stream (`newsong`, same url, `startOffset`) keeps its mark, less `from` | **FIXED 2026-09-23** (1.0.15), reported by Simon | `A PAUSE IS NOT A GAP` |
+| pause: `Tracker::_unpause` stops the session clock; a paused stream's re-stream (`newsong`, same url, `startOffset`) keeps its mark only if it starts where it paused (`RESUME_SLACK`), crediting `startOffset - base`; a station title change is ignored only while it has no length | **FIXED 2026-09-23** (1.0.15), reported by Simon | `A PAUSE IS NOT A GAP` |
 | track length re-read at every `_markTick`, `Sources::trackDuration` handler-first for a remote track; a service track with no length waits, is not counted at 60s | **FIXED 2026-09-23** (1.0.15), reported by Simon | `THE LENGTH IS READ AT EVERY CHECK` |
 | shuffle / random order within one album | works the same as track order: `album_key` + distinct url, order never read (pinned 2026-09-23) | `2+ TRACKS = AN ALBUM` |
 | By service menu, sort row `_sortRow`/`sortEntries`, date search `parseDateSearch` | **DECIDED by Simon 2026-09-18** (0.1.3) | `DATES, SERVICE MENU, SORT` |
@@ -54,7 +54,7 @@ grep -n "_record\|album_key" CLAUDE.md
 | `entryRow` text: Album over Artist (a track: one line "Title by Artist from Album", 1.0.4), no count / player / time on the row; `_when`, `PLUGIN_LH_TRACKS_OF`, `PLUGIN_LH_FROM` removed | **DECIDED by Simon 2026-09-19** | `A ROW READS LIKE A RELEASE` |
 | `_titled`: web-skin `name` = "Album by Artist", Material gets `line1` over `line2` | **DECIDED by Simon 2026-09-19** (1.0.2 review) | `THE WEB SKINS KEEP THE ARTIST IN THE NAME` |
 | `_trackName`: a single-track row: web skins "Title by Artist from Album" (as LMS names a favourite track); Material "Title from Album" over the artist | **DECIDED by Simon 2026-09-19, CHANGED by Simon 2026-09-21** (artist to line 2) | `A SINGLE TRACK IS NAMED LIKE LMS NAMES ONE` |
-| restart carry-on `Tracker::_restore`, `resumed_url` + `resumed_title` (1.0.15): first newsong per player after startup rebuilds the session from its last entry (within `session_gap_min`); the first counted play is dropped if it is the last play's url AND title | **ASKED FOR by Simon 2026-09-21**; carry-on VERIFIED LIVE 1.0.11, offset path unexercised live (Simon 2026-09-23: local files DO resume in place in some circumstances) | `A RESTART IS NOT A NEW LISTEN` |
+| restart carry-on `Tracker::_restore`, `resumed_url` + `resumed_title` (1.0.15): first newsong per player after startup rebuilds the session from its last entry (within `session_gap_min`); the first counted play is dropped if it is the last play's url (and title, only where `Sources::sharesUrl`: Radio Paradise) | **ASKED FOR by Simon 2026-09-21**; carry-on VERIFIED LIVE 1.0.11, offset path unexercised live (Simon 2026-09-23: local files DO resume in place in some circumstances) | `A RESTART IS NOT A NEW LISTEN` |
 | service track title `Sources::describe`: handler `$meta->{title}` BEFORE `$track->title`, except a plain web track (`http`/`https`: LMS's HTTP handler splits the row name); radio names from `$track->title` | **FIXED 2026-09-21**, asked for by Simon | `THE SERVICE NAMES ITS TRACK` |
 | `Sources::_isSplit` lexical `$a` (shadows `sort`'s) | **DECLINED by Simon 2026-09-21**: harmless, rename only in passing | `§C` round 2026-09-21 #6 |
 | back-fill from LMS's own play data (`tracks_persistent` lastplayed/playcount) | **DECLINED by Simon 2026-09-18** | `NO BACK-FILL FROM LMS` |
@@ -393,8 +393,8 @@ can be DISPROVEN. Closing a round is not a suppression.
   second track. Still OPEN: a Qobuz track replayed from a favourite or history row records its plain title.
   The `startOffset` resume path is unexercised live. These specific paths have not been checked individually and are covered by
   the suites only:
-  - 1.0.15 (built 2026-09-23, reviewed once, committed on dev `874e991` + `d46604c`, zip `cfdcde49…`; NOT
-    pushed, NOT installed): the pause re-stream (only from the pause position), the pause clock, the per-check
+  - 1.0.15 (built 2026-09-23; two review rounds + a full check, all CLOSED; committed on dev `874e991` →
+    the full-check commit, zip `54b0ccb4…`; NOT pushed, NOT installed): the pause re-stream (only from the pause position), the pause clock, the per-check
     length (RP songs, a queued streaming track), the RP-only restart title check. Checks for Simon: pause a Qobuz album
     mid-track for 40+ min and resume (one entry, the paused track in it); a Radio Paradise hour (every song
     heard to 90% appears); a local album with a Qobuz album queued after it (no streaming row before its
@@ -417,7 +417,34 @@ can be DISPROVEN. Closing a round is not a suppression.
 
 ### C. CLOSED FINDINGS
 
-**Review round 2026-09-23 (`874e991`, 1.0.15, /code-review) — CLOSED, three findings, all FIXED (uncommitted).**
+**Full check of 1.0.15 2026-09-23 (whole Tracker state machine walked by hand, after two review rounds) —
+one finding, FIXED, committed.** A same-url newsong was dropped as a station title change whenever the
+pending mark or the session was a STATION, even when the new song HAS a length. So if Radio Paradise's first
+song was still undescribed (length 0) at its 60s check, it became a station session and every later RP song
+was ignored until a stop (older than 1.0.15; RP symptom). Fix: the station early-returns apply only while the
+newsong itself is a station (`$station`, no length). Guard: "RP after a station guess" (2 red on `23bace0`);
+the radio title-change tests stay green. Checked in the same pass and CLEARED, with the source read: only
+`_Pause` / `_Resume` notify `playlist pause` (a rebuffer's `_Resume` sends a `pause 0` with no `pause 1`,
+which `_unpause` ignores); LMS turns a pause a handler refuses into a STOP (`StreamingController::pause`), and
+RP refuses pause (`canDoAction`), so RP never enters the pause paths; `_JumpToTime` with `restartIfNoSeek` on an
+unseekable track restarts at 0, which misses the position match and is timed from the top (correct); `pos` is
+`playingSongElapsed` = `resumeTime` while paused, the same absolute figure a re-stream's `startOffset` is; a
+restart's `from`/`base` start equal, so a later resume credits only what played after it; a seek with no pause
+still owes the whole 90%; `trackDuration`'s handler-first order reads a numeric `duration` (Qobuz, Spotty,
+TIDAL, RP); a non-numeric one falls back to the song's.
+
+**Second review round 2026-09-23 (`874e991~1..23bace0`, 1.0.15 span, /code-review) — CLOSED, one finding,
+FIXED, committed.** A seek, THEN a pause and resume, credited the whole resume point: `from` was set to
+the re-stream's startOffset, but the mark was timing a stream that began at the seek point (`from` 0). 10-min
+track, seek to 8:00, pause at 8:30, resume: 510s credited, recorded at 9:00 after a minute heard. Fix:
+`$pending{…}{base}` = where the mark's current stream began; a resume adds `startOffset - base` to `from`
+and moves `base`. Guard: "seek then pause" (2 red on `23bace0`) + "CONTROL two resumes" (green both). Writer:
+LMS `time` (a seek) then pause on a remote track, reachable from any skin's seek bar. Cleared by the same
+review (checked, not defects): the pause clock shift incl. a pause between tracks, skip while paused, a second
+pause after a resume; the per-check length incl. a service track waiting with no length; the RP-only title
+check; the station path writing nothing; no leftover `record_radio` reference.
+
+**Review round 2026-09-23 (`874e991`, 1.0.15, /code-review) — CLOSED, three findings, all FIXED (`d46604c`).**
 
 | # | finding | disposition |
 |---|---|---|
@@ -537,7 +564,7 @@ V=1 perl tools/t_tracker.pl
 ```
 | suite | protects |
 |---|---|
-| `t_tracker.pl` | the grouping rules end to end through the real callback + timers: one track, album promotion, A/B/A, stop, same url, gap, two players, skip, pause, Qobuz id grouping, first-credit grouping, Spotty error text, radio timed once and NOT recorded (+ the deadline; ends the album session), a web track with no length at start is not timed as radio (skip at 61s of 300 not recorded), removed-mid-album, a server restart (album carries on, resumed track once, long track, before-count, single track, deliberate replay, other album, stop, gap control, other player, radio), a local resume at an offset vs a seek control, a streaming restart from the top, a service track titled by its handler (+ no-title control), a plain web track keeping its own title and not the split's artist (+ real-artist control), 1.0.15: a pause (streaming re-stream keeps its mark, after-count, local pause clock, mid-track, skip while paused, 4 controls), the length re-read at every check (late length, no length yet, Radio Paradise per song + restart title check) |
+| `t_tracker.pl` | the grouping rules end to end through the real callback + timers: one track, album promotion, A/B/A, stop, same url, gap, two players, skip, pause, Qobuz id grouping, first-credit grouping, Spotty error text, radio timed once and NOT recorded (+ the deadline; ends the album session), a web track with no length at start is not timed as radio (skip at 61s of 300 not recorded), removed-mid-album, a server restart (album carries on, resumed track once, long track, before-count, single track, deliberate replay, other album, stop, gap control, other player, radio), a local resume at an offset vs a seek control, a streaming restart from the top, a service track titled by its handler (+ no-title control), a plain web track keeping its own title and not the split's artist (+ real-artist control), 1.0.15: a pause (streaming re-stream keeps its mark, after-count, local pause clock, mid-track, skip while paused, 4 controls; seek while paused; seek then pause credits only what played + two-resume control), the length re-read at every check (late length, no length yet, Radio Paradise per song + restart title check, RP-only title check vs a service title fallback, RP after a station guess) |
 | `t_db.pl` | schema stamp + re-open, promote in one transaction, no orphan play on a missing entry, literal `%`/`_` search, indexes, forDay injection, remove/purge cascade, a failed COMMIT reported as failure by addToEntry/remove/purge |
 | `t_browse.pl` | shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is "Title by Artist from Album" on the web skins and "Title from Album" over the artist on Material (each clause dropped alone; no artist = no second line), a station has no second line, By release (type rows in LMS order and names with counts, each opening its releases; library type read LIVE incl. Material's compilation rule, Qobuz type stored; LMS's releaseTypeName preferred) and its tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), year search (the Played in row above the text matches, ranges, a numeric name) and By date years (All of + months), context menu + remove, settings clamps (no `record_radio`) |
 | `t_load.pl` | every module loads; every `Plugins::ListeningHistory::X::y` call is defined |

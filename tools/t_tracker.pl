@@ -730,6 +730,53 @@ delete $Slim::Player::ProtocolHandlers::META{qobuz}{'qobuz://r1.flac'}{title};  
 play($kitchen, remoteTrack(url => 'qobuz://r1.flac', title => 'R1 by R Band from R Album'));
 is('restart, service title not ready: the resumed track is not counted twice', scalar @{ entries() }, 1);
 
+# --- second review of 1.0.15 (2026-09-23) --------------------------------------------------------
+# A seek, THEN a pause and resume: the mark times the stream that began at the seek point, so the
+# resume credits only what played since then, not everything before the resume point.
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = { 'qobuz://long.flac' =>
+    { title => 'Long', artist => 'L', album => 'L LP', albumId => 'qlong', duration => 600 } };
+play($kitchen, remoteTrack(url => 'qobuz://long.flac', title => 'Long'), duration => 600, listen => 0);
+$kitchen->{song}{startOffset} = 480;              # seek to 8:00
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+$kitchen->{elapsed} = 30;                         # 8:30, pause
+pause($kitchen);
+TestClock::advance(600);
+$kitchen->{song}{startOffset} = 510;              # LMS re-streams from 8:30
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('seek then pause: 30s heard is credited, not 510s', $due > 400);
+$kitchen->{elapsed} = 30;                         # plays to 9:00
+Slim::Utils::Timers::fire_timer($kitchen);
+is('seek then pause: a minute of a ten-minute track is not a listen', scalar @{ entries() }, 0);
+
+# CONTROL: resumed twice from the top: 100s, then 50s more, are both credited.
+fresh();
+play($kitchen, qp(1), listen => 0);
+$kitchen->{elapsed} = 100; pause($kitchen);
+$kitchen->{song}{startOffset} = 100; $kitchen->{elapsed} = 0; event($kitchen, 'newsong');
+$kitchen->{elapsed} = 50;  pause($kitchen);
+$kitchen->{song}{startOffset} = 150; $kitchen->{elapsed} = 0; event($kitchen, 'newsong');
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('CONTROL two resumes: 150s credited, 30s owed', $due <= 30);
+
+# --- full check of 1.0.15 (2026-09-23) -------------------------------------------------------------
+# Radio Paradise's first song not yet described when its 60s check comes round (no length): it is
+# taken for a station. Every later song is on the same url; one WITH a length is a track, not a
+# station title change, or nothing more is recorded until the player stops.
+fresh();
+rpSong('Undescribed', 0, 0);
+$kitchen->{elapsed} = 60;
+Slim::Utils::Timers::fire_timer($kitchen);        # timed out as a station, nothing recorded
+is('RP first song undescribed: nothing recorded for it', scalar @{ entries() }, 0);
+rpSong('Second', 200, 0);
+ok('RP after a station guess: the next song is timed', scalar @Slim::Utils::Timers::ARMED);
+$kitchen->{elapsed} = 185;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('RP after a station guess: the next song is recorded', join(',', map { $_->{title} } @{ entries() }), 'Second');
+
 delete $Slim::Player::ProtocolHandlers::META{radioparadise};
 
 main::done();
