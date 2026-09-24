@@ -272,3 +272,27 @@ Four reports from Simon, one build. Ledger: `A PAUSE IS NOT A GAP`, `THE LENGTH 
 - Third review (same day): no findings; clearances logged in the ledger §C.
 - Zip sha `54b0ccb471fa49a96987c69a5b097556b4e6d59b` (earlier builds `de3bf3ec…`, `cfdcde49…`, all 1.0.15, none pushed or installed). CHANGELOG /
   README wait for the merge to `main`.
+
+## Next (dev, not built; after 1.0.15) — library albums found again after a rescan
+
+Asked for by Simon 2026-09-24, from comparing Material's Recently Played: "follow what LMS does".
+
+- `Sources::describe` records three lasting keys beside `ref.album_id`: `album_mbid`
+  (`albums.musicbrainz_id`), `track_mbid` (the recording MBID), and `album_url` (LMS's
+  `Album::url`).
+- New `Sources::libraryAlbum($e, $capture)`. When the row id is gone, it tries in order: the album
+  MBID (for a release split into one album per disc, the disc that was played), the played files
+  (which must all agree), the track MBID (only if it names ONE album), then LMS's album url (for
+  entries recorded before the keys existed, rebuilt from an album entry's album and artist). A find
+  is written back with the new `DB::relinkLibrary` (compare-and-set, never during a scan, `plays`
+  untouched). With `$capture`, an entry whose id is still valid stores the keys it lacks.
+- `resolveTracks` (captures) and `releaseType` (never captures) go through it.
+  `_libraryReleaseType` now takes an Album object.
+- No schema change: `user_version` stays 1.
+- Tests: the relink blocks in `t_browse.pl` and `t_db.pl`, and "keys" in `t_tracker.pl`. The stubs
+  gain `objectForUrl`, the MBID searches and `Import::stillScanning`. 12 mutations, each red.
+- Residuals:
+  - An old single-track entry never captures the keys (its row plays the file directly), so after
+    a MOVE its release type is not recovered.
+  - Step 5 is LMS's own guess by name.
+  - UNVERIFIED LIVE.

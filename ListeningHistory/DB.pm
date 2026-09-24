@@ -245,6 +245,34 @@ sub setReleaseType {
     return $ok;
 }
 
+# Point a LIBRARY entry at its album again (Sources::libraryAlbum), or store the album's lasting
+# keys on it. Compare-and-set: written only while the entry is still a library entry whose
+# ref.album_id is $expect, so a promotion or a Remove in between wins. The keys are merged into
+# the ref as it is NOW; album_key follows only where it was the old "lib:<id>"; artwork only when
+# given. Plays are never touched. Returns true on a write.
+my %RELINK_KEYS = map { $_ => 1 } qw(album_id album_mbid track_mbid album_url);
+
+sub relinkLibrary {
+    my ($id, $expect, $new) = @_;
+    return 0 unless defined $id && $id =~ /^\d+$/ && defined $expect && ref $new eq 'HASH'
+        && defined $new->{album_id} && $new->{album_id} =~ /^\d+$/;
+    my $ok = 0;
+    _txn('relinking a library album', sub {
+        my ($h) = @_;
+        my $row = $h->selectrow_hashref('SELECT source, ref_json, album_key FROM entries WHERE id = ?',
+            undef, $id) or return;
+        return unless ($row->{source} // '') eq 'library';
+        my $ref = eval { $JSON->decode($row->{ref_json} // '{}') } || {};
+        return unless defined $ref->{album_id} && $ref->{album_id} eq $expect;
+        $ref->{$_} = $new->{$_} for grep { $RELINK_KEYS{$_} && defined $new->{$_} } keys %$new;
+        my $key = ($row->{album_key} // '') eq "lib:$expect" ? "lib:$new->{album_id}" : $row->{album_key};
+        $h->do('UPDATE entries SET ref_json = ?, album_key = ?, artwork = COALESCE(?, artwork) WHERE id = ?',
+            undef, $JSON->encode($ref), $key, $new->{artwork}, $id);
+        $ok = 1;
+    }) or return 0;
+    return $ok;
+}
+
 sub _insertPlay {
     my ($h, $entryId, $p, $when) = @_;
     $h->do('INSERT INTO plays (entry_id, url, title, artist, album, duration, played_at)

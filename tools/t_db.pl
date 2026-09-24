@@ -106,6 +106,39 @@ is('forDay rejects a malformed day', scalar @{ Plugins::ListeningHistory::DB::fo
     $D->can('remove')->($rid);
 }
 
+# --- relinkLibrary: compare-and-set, merges into the ref, never touches the plays --------------------
+{
+    my $D = 'Plugins::ListeningHistory::DB';
+    my $rid = add(title => 'RL', url => 'file:///rl', played_at => $t0 + 960, album_key => 'lib:7',
+                  artwork => '/music/old/cover', ref => { album_id => 7, release_type => 'EP' });
+    my $plays = sub { join '|', map { "$_->{id}:$_->{url}:$_->{played_at}" } @{ $D->can('plays')->($rid) } };
+    my $before = $plays->();
+    is('relink: a stale expectation is refused', $D->can('relinkLibrary')->($rid, 8, { album_id => 9 }), 0);
+    is('relink: and changes nothing', $D->can('get')->($rid)->{ref}{album_id}, 7);
+    is('relink: stored', $D->can('relinkLibrary')->($rid, 7, { album_id => 42, album_mbid => 'm', album_url => 'db:x',
+                                                              artwork => '/music/new/cover', bogus => 1 }), 1);
+    my $e = $D->can('get')->($rid);
+    is('relink: the new album id', $e->{ref}{album_id}, 42);
+    is('relink: the keys are merged in', "$e->{ref}{album_mbid} $e->{ref}{album_url}", 'm db:x');
+    is('relink: the rest of the ref is kept', $e->{ref}{release_type}, 'EP');
+    ok('relink: an unknown key is not stored', !exists $e->{ref}{bogus});
+    is('relink: the session key follows the id', $e->{album_key}, 'lib:42');
+    is('relink: the artwork is refreshed', $e->{artwork}, '/music/new/cover');
+    is('relink: the plays are untouched', $plays->(), $before);
+    is('relink: no artwork given keeps the old one', $D->can('relinkLibrary')->($rid, 42, { album_id => 43 }), 1);
+    is('relink: … kept', $D->can('get')->($rid)->{artwork}, '/music/new/cover');
+
+    my $other = add(title => 'OK', url => 'file:///ok', played_at => $t0 + 961, album_key => 'other', ref => { album_id => 5 });
+    $D->can('relinkLibrary')->($other, 5, { album_id => 6 });
+    is('relink: a key that was not lib:<old> is left alone', $D->can('get')->($other)->{album_key}, 'other');
+
+    my $svc = add(title => 'Q', source => 'qobuz', url => 'qobuz://1', played_at => $t0 + 962, ref => { album_id => 5 });
+    is('relink: a non-library entry is refused', $D->can('relinkLibrary')->($svc, 5, { album_id => 6 }), 0);
+    is('relink: a missing entry is refused', $D->can('relinkLibrary')->(999999, 5, { album_id => 6 }), 0);
+    is('relink: a non-numeric album id is refused', $D->can('relinkLibrary')->($other, 6, { album_id => 'x' }), 0);
+    $D->can('remove')->($_) for $rid, $other, $svc;
+}
+
 # --- remove and purge take the plays with them ---------------------------------------------------
 is('remove: one entry', Plugins::ListeningHistory::DB::remove($id), 1);
 is('remove: its plays go too', scalar @{ Plugins::ListeningHistory::DB::plays($id) }, 0);

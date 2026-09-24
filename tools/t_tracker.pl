@@ -26,9 +26,11 @@ ok('the tracker subscribes to playlist events', ref $CB eq 'CODE');
 # started inside the track (a resume, a seek) is the song's startOffset.
 { package FakeSong;    sub duration { $_[0]{duration} } sub track { $_[0]{track} } sub startOffset { $_[0]{startOffset} } }
 { package FakeTrack;   sub url { $_[0]{url} } sub title { $_[0]{title} } sub artistName { $_[0]{artist} }
-  sub album { $_[0]{album} } sub albumname { $_[0]{albumname} } sub remote { $_[0]{remote} } }
+  sub album { $_[0]{album} } sub albumname { $_[0]{albumname} } sub remote { $_[0]{remote} }
+  sub musicbrainz_id { $_[0]{mbid} } }
 { package FakeAlbum;   sub id { $_[0]{id} } sub title { $_[0]{title} } sub year { $_[0]{year} }
-  sub artwork { $_[0]{artwork} } sub contributor { my $n = $_[0]{artist}; bless { n => $n }, 'FakeContrib' } }
+  sub artwork { $_[0]{artwork} } sub contributor { my $n = $_[0]{artist}; bless { n => $n }, 'FakeContrib' }
+  sub musicbrainz_id { $_[0]{mbid} } sub url { "db:album.title=$_[0]{title}&contributor.name=$_[0]{artist}" } }
 { package FakeContrib; sub name { $_[0]{n} } }
 { package FakeRequest; sub client { $_[0]{client} } sub getParam { $_[0]{params}{ $_[1] } }
   sub isCommand { my ($s, $spec) = @_; return scalar grep { $_ eq $s->{cmd} } @{ $spec->[1] } } }
@@ -102,6 +104,36 @@ is('album: knows the album length from the library', $e->[0]{track_total}, 12);
 is('album: the track title is cleared', $e->[0]{title}, undef);
 is('album: replays by library album id', $e->[0]{ref}{album_id}, 10);
 is('album: all three plays are logged', scalar @{ Plugins::ListeningHistory::DB::plays($e->[0]{id}) }, 3);
+
+# --- the lasting keys: a rescan renumbers the album, so its MBIDs and LMS url go with it ---
+fresh();
+{
+    my $M1 = '11111111-1111-1111-1111-111111111111';
+    local $ALB{10}{mbid} = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    my ($t1, $t2) = (libTrack(10, 1), libTrack(10, 2));
+    $t1->{mbid} = $M1;
+    $t2->{mbid} = '22222222-2222-2222-2222-222222222222';
+    play($kitchen, $t1);
+    $e = entries();
+    is('keys: a tagged track stores the album MBID', $e->[0]{ref}{album_mbid}, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    is('keys: and the track (recording) MBID', $e->[0]{ref}{track_mbid}, $M1);
+    is('keys: and LMS\'s own album url', $e->[0]{ref}{album_url}, 'db:album.title=Blue Album&contributor.name=Band A');
+    play($kitchen, $t2);
+    $e = entries();
+    is('keys: promotion keeps the album MBID', $e->[0]{ref}{album_mbid}, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    is('keys: promotion keeps an album url', $e->[0]{ref}{album_url}, 'db:album.title=Blue Album&contributor.name=Band A');
+    is('keys: promotion keeps the row id', $e->[0]{ref}{album_id}, 10);
+}
+fresh();
+{
+    my $t = libTrack(20, 1);
+    $t->{mbid} = 'not-a-uuid';
+    play($kitchen, $t);
+    $e = entries();
+    ok('keys: an untagged album stores no album MBID', !exists $e->[0]{ref}{album_mbid});
+    ok('keys: a malformed track MBID is not stored', !exists $e->[0]{ref}{track_mbid});
+    is('keys: an untagged album still stores its url', $e->[0]{ref}{album_url}, 'db:album.title=Red Album&contributor.name=Band B');
+}
 
 # --- shuffle: an album in random order groups exactly as in track order (Simon, 2026-09-23) ---
 fresh();
