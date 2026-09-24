@@ -3,6 +3,14 @@
 User-facing release notes, written at each merge to `main`. Per-build engineering notes live in
 `docs/VERSION-HISTORY.md`.
 
+## 1.0.19 — 2026-09-24
+
+Radio Paradise's station breaks no longer appear in your history.
+
+### Fixes
+- **Radio Paradise breaks aren't recorded.** The station break (*Listener-supported* by *Commercial-free*) and DJ announcements on an interactive stream were being recorded as songs. They're now skipped, using the Radio Paradise plugin's own rule for spotting them. The songs either side are recorded as usual. Breaks already in your history stay until you remove them (… → Remove from history).
+- **The Album session gap setting now says that time spent paused doesn't count**, which has been true since 1.0.18.
+
 ## 1.0.18 — 2026-09-24
 
 Your history now keeps up with your library, a pause no longer splits an album, and Radio Paradise records every song.

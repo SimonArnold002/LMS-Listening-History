@@ -19,6 +19,7 @@ Skin preferred. Built 2026-09-18 from Simon's brief, in the shape of Listen Late
   2026-09-21: merge `765f0d0`, tag `v1.0.14`.
   **1.0.18** (1.0.15–1.0.18: pause, Radio Paradise per song, stations dropped, library entries found again
   and following the library, the post-rescan check) released 2026-09-24, tag `v1.0.18`.
+  **1.0.19** (Radio Paradise breaks not recorded) released 2026-09-24, tag `v1.0.19`.
 - Work happens on `dev`. `dev` mirrors `main` except for ONE line, the `repo.xml` `<url>`:
   - main: `https://simonarnold002.github.io/LMS-Listening-History/ListeningHistory.zip` (Pages)
   - dev: `https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/dev/ListeningHistory.zip`
