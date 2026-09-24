@@ -554,6 +554,12 @@ Not defects and not decisions. Re-raise one only by disproving the evidence it c
 
 ### C. CLOSED FINDINGS
 
+**Review round 2026-09-24 (`5978ef8..cc92c72`, 1.0.19, /code-review) — CLOSED, NO findings.** Checked and
+CLEARED: `_rpAnnouncement` returns from `describe` before `is_station` / the album key, RP only; `_record`
+returns before the session or the restart markers (`resumed_url` / `resumed_title`) are touched, so the songs
+either side are recorded; a break first armed as a station (no length at `newsong`) still reaches `describe`
+and is skipped; `$song->streamUrl` is read in an `eval` with a `''` fallback. The `/dj/` signal stays §B.
+
 **Review round 2026-09-24 (`063e1d8..c0f875c`, 1.0.18, /code-review) — CLOSED, NO findings.** Checked
 and CLEARED: `releaseType` on a live album reads exactly what the no-mode `libraryAlbum` read (find,
 no write); a renumbered album reads ALBUM until the sweep or an open (library entries store no type);
