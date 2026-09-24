@@ -24,7 +24,7 @@ ok('the tracker subscribes to playlist events', ref $CB eq 'CODE');
   sub id { $_[0]{id} } sub name { $_[0]{name} } sub playingSong { $_[0]{song} } sub songElapsedSeconds { $_[0]{elapsed} } }
 # Like LMS: songElapsedSeconds counts from the start of the current STREAM; where a stream
 # started inside the track (a resume, a seek) is the song's startOffset.
-{ package FakeSong;    sub duration { $_[0]{duration} } sub track { $_[0]{track} } sub startOffset { $_[0]{startOffset} } }
+{ package FakeSong;    sub duration { $_[0]{duration} } sub track { $_[0]{track} } sub startOffset { $_[0]{startOffset} } sub streamUrl { $_[0]{streamUrl} } }
 { package FakeTrack;   sub url { $_[0]{url} } sub title { $_[0]{title} } sub artistName { $_[0]{artist} }
   sub album { $_[0]{album} } sub albumname { $_[0]{albumname} } sub remote { $_[0]{remote} }
   sub musicbrainz_id { $_[0]{mbid} } }
@@ -809,6 +809,40 @@ $kitchen->{elapsed} = 185;
 Slim::Utils::Timers::fire_timer($kitchen);
 is('RP after a station guess: the next song is recorded', join(',', map { $_->{title} } @{ entries() }), 'Second');
 
+# Radio Paradise's station break ("Listener-supported" by "Commercial-free") and DJ talk are blocks
+# with a length like any song: not recorded (Simon, 2026-09-24), by RP's own rule (API.pm). The songs
+# either side are.
+fresh();
+my $rpBlock = sub {
+    my ($meta, $stream) = @_;
+    $Slim::Player::ProtocolHandlers::META{radioparadise} = $meta;
+    $kitchen->{song}    = bless { duration => 0, streamUrl => $stream,
+                                  track => remoteTrack(url => $rpUrl, title => 'Radio Paradise') }, 'FakeSong';
+    $kitchen->{elapsed} = 0;
+    event($kitchen, 'newsong');
+    $kitchen->{elapsed} = int($meta->{duration} * 0.95);
+    Slim::Utils::Timers::fire_timer($kitchen);
+};
+$rpBlock->({ title => 'Before Break', artist => 'Band', duration => 200 }, 'https://apps.radioparadise.com/blocks/chan/0/4/1-1.flac');
+$rpBlock->({ title => 'Listener-supported', artist => 'Commercial-free', duration => 20 }, 'https://apps.radioparadise.com/blocks/chan/0/4/2-2.flac');
+$rpBlock->({ title => 'LISTENER-SUPPORTED', artist => 'Radio Paradise', duration => 20 }, undef);       # title alone, any case
+$rpBlock->({ title => 'Station ID', artist => 'CommercialFree', duration => 20 }, undef);              # artist alone, no hyphen
+$rpBlock->({ title => 'Bill Talks', artist => 'Bill Goldsmith', duration => 60 }, 'https://apps.radioparadise.com/blocks/chan/0/dj/3-3.flac');
+$rpBlock->({ title => 'After Break', artist => 'Band', duration => 200 }, 'https://apps.radioparadise.com/blocks/chan/0/4/4-4.flac');
+is('RP breaks: the station break and the DJ are not recorded, the songs either side are',
+   join(',', map { $_->{title} } reverse @{ entries() }), 'Before Break,After Break');
+
 delete $Slim::Player::ProtocolHandlers::META{radioparadise};
+
+# CONTROL: the rule is Radio Paradise's. A service track that happens to carry the words is recorded.
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = { title => 'Listener-supported', artist => 'Commercial-free', duration => 200 };
+$kitchen->{song}    = bless { duration => 200, track => remoteTrack(url => 'qobuz://77.flac', title => 'x') }, 'FakeSong';
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+$kitchen->{elapsed} = 190;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('CONTROL RP breaks: only Radio Paradise is filtered', join(',', map { $_->{title} } @{ entries() }), 'Listener-supported');
+delete $Slim::Player::ProtocolHandlers::META{qobuz};
 
 main::done();

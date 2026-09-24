@@ -337,3 +337,16 @@ From the /code-review of 1.0.16–1.0.17 (ledger §C, review round 2026-09-24).
 - Tests: `t_browse.pl` "CONTROL relink: a list render does not search" (0 lookups) and "and writes
   nothing", both RED with the 1.0.16 line put back. 485 assertions.
 - Zip sha `1092d2c7cec6dae722be7f6b26d38a500b6aa6f9`. CHANGELOG / README wait for the merge to `main`.
+
+## Unreleased (after 1.0.18, not built) — Radio Paradise breaks are not recorded
+
+Asked for by Simon 2026-09-24 after an entry "Listener-supported" by "Commercial-free" appeared.
+- `Sources::describe` skips a Radio Paradise block that RP's own plugin treats as an announcement
+  (`_rpAnnouncement`: a `/dj/` block url via `$song->streamUrl`, or title `listener-?supported`, or artist
+  `commercial-?free`). Radio Paradise only. Ledger `RP BREAKS ARE NOT MUSIC`.
+- Tests: `t_tracker.pl` "RP breaks" and its control; 3 mutations each red. 487 assertions.
+- Docs: the "Album session gap" wording in README's settings table and on the settings page
+  (`strings.txt`) says time spent paused doesn't count (true since 1.0.15; missed at the 1.0.18 release).
+  Code comments in `Sources.pm` / `Tracker.pm` name the RP breaks.
+- README: the RP bullet names the breaks as not recorded. CHANGELOG waits for the merge to `main`.
+

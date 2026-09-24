@@ -51,7 +51,7 @@ Then install **Listening History** from the plugin list and restart the server.
 - **Back-to-back tracks from one album become one album entry.** The first track appears as a track; as soon as a second track from the same album plays, the entry turns into an album and its count goes up with every further track.
 - **A new album, a stop, or a cleared queue starts a new entry.** So does a gap longer than 30 minutes between two tracks. Time spent paused doesn't count towards that gap, so a long pause doesn't split an album.
 - **A server restart doesn't split anything.** If an album carries on after the server restarts, it stays one entry, and a track already counted isn't counted again.
-- **Internet radio stations aren't recorded.** Radio Paradise's **interactive** streams, played through the Radio Paradise plugin, are the exception: they give every song its own title, artist and length, so each song is recorded as a track once 90% of it has played. Radio Paradise's regular streams don't: they're a continuous station with no song lengths or timeline, so they're treated like any other station and not recorded. Station entries recorded by an earlier version stay in your history and still play.
+- **Internet radio stations aren't recorded.** Radio Paradise's **interactive** streams, played through the Radio Paradise plugin, are the exception: they give every song its own title, artist and length, so each song is recorded as a track once 90% of it has played. Its station breaks (*Listener-supported*, *Commercial-free*) and DJ announcements aren't. Radio Paradise's regular streams don't: they're a continuous station with no song lengths or timeline, so they're treated like any other station and not recorded. Station entries recorded by an earlier version stay in your history and still play.
 
 ### When your library changes
 
@@ -110,7 +110,7 @@ Use the row's **… → More → Remove from history** to delete an entry.
 | Setting | Default | What it does |
 |---|---|---|
 | Track counts as played at | 90 % | How much of a track must play before it's recorded |
-| Album session gap | 30 minutes | The longest pause between two tracks that still groups them into one album |
+| Album session gap | 30 minutes | The longest gap between two tracks that still groups them into one album. Time spent paused doesn't count |
 | Keep history for | 0 days (forever) | Entries older than this are removed once a day |
 
 ---
