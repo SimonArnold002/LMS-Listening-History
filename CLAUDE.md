@@ -513,7 +513,7 @@ Not defects and not decisions. Re-raise one only by disproving the evidence it c
     first track reaches 90%).
   - `Sources::isStation` — any remote non-service url with no duration is a station (timed, not recorded
     since 1.0.15). Not checked against TuneIn or BBC Sounds.
-  - `Sources::_rpAnnouncement` (unreleased, after 1.0.18): the `/dj/` signal on `$song->streamUrl`. The
+  - `Sources::_rpAnnouncement` (1.0.19, built, not installed): the `/dj/` signal on `$song->streamUrl`. The
     station break ("Listener-supported" by "Commercial-free") was SEEN recorded live on 1.0.17, which is
     what the title/artist test matches; no DJ block has been seen yet.
   - `_albumNode` for Tidal, Deezer and Spotty (Qobuz is exercised with a stub only).

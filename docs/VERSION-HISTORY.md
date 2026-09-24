@@ -338,7 +338,7 @@ From the /code-review of 1.0.16–1.0.17 (ledger §C, review round 2026-09-24).
   nothing", both RED with the 1.0.16 line put back. 485 assertions.
 - Zip sha `1092d2c7cec6dae722be7f6b26d38a500b6aa6f9`. CHANGELOG / README wait for the merge to `main`.
 
-## Unreleased (after 1.0.18, not built) — Radio Paradise breaks are not recorded
+## 1.0.19 — 2026-09-24 (dev, built: zip 9c156a9a…, not installed) — Radio Paradise breaks are not recorded
 
 Asked for by Simon 2026-09-24 after an entry "Listener-supported" by "Commercial-free" appeared.
 - `Sources::describe` skips a Radio Paradise block that RP's own plugin treats as an announcement
@@ -350,3 +350,4 @@ Asked for by Simon 2026-09-24 after an entry "Listener-supported" by "Commercial
   Code comments in `Sources.pm` / `Tracker.pm` name the RP breaks.
 - README: the RP bullet names the breaks as not recorded. CHANGELOG waits for the merge to `main`.
 
+- Zip sha `9c156a9a52cb40cdf00a54fe5c8ea23a59cb3aef`.
