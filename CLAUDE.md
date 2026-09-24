@@ -531,6 +531,12 @@ Not defects and not decisions. Re-raise one only by disproving the evidence it c
 
 ### C. CLOSED FINDINGS
 
+**Review round 2026-09-24 (`063e1d8..c0f875c`, 1.0.18, /code-review) — CLOSED, NO findings.** Checked
+and CLEARED: `releaseType` on a live album reads exactly what the no-mode `libraryAlbum` read (find,
+no write); a renumbered album reads ALBUM until the sweep or an open (library entries store no type);
+`libraryAlbum`'s only plugin callers are `sweepTick` and `resolveTracks`, so its comment is true; the
+new test's lookup counter catches the old path (it searches by album MBID through `Slim::Schema->search`).
+
 **Review round 2026-09-24 (`74013de~1..063e1d8` + the uncommitted doc edits, /code-review) — CLOSED,
 two findings, both FIXED and BUILT as 1.0.18 (not installed; UNVERIFIED LIVE, nothing to see beyond
 By release staying quick during a rescan).**
