@@ -24,7 +24,8 @@ package Plugins::ListeningHistory::Tracker;
 #
 #   Radio STATIONS are not recorded (Simon, 2026-09-23). A stream with no length is timed as one
 #   for 60s, in case it learns its length (a podcast, Radio Paradise's first song), and its title
-#   changes, newsong events on the same url, are ignored.
+#   changes, newsong events on the same url, are ignored. Radio Paradise's station breaks and DJ
+#   talk are not recorded either: describe() declines them, and the session carries on untouched.
 #
 #   Sessions live in memory, so a server restart would forget them: the album being played
 #   would split in two when it is resumed, and a track already counted would be counted
@@ -331,7 +332,8 @@ sub _record {
     );
 
     # Radio stations are not recorded (Simon, 2026-09-23: a continuous stream says nothing to find
-    # again later; Radio Paradise, which names each song, is recorded song by song as tracks). The
+    # again later; Radio Paradise, which names each song, is recorded song by song as tracks, not its
+    # station breaks or DJ talk, which describe() has already declined above). The
     # station still ends the album session, and its later title changes are ignored.
     if ($d->{is_station}) {
         $session{$cid} = { kind => 'station', url => $d->{url}, last_at => $now };

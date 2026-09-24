@@ -4,7 +4,8 @@ package Plugins::ListeningHistory::Sources;
 #
 #   describe()      what is playing right now, as the fields an entry needs — source, names,
 #                   artwork, the album key that groups back-to-back tracks, and the reference
-#                   that plays it again.
+#                   that plays it again — or why it is not recorded (no title, a service error
+#                   answer, a Radio Paradise station break or DJ talk).
 #   resolveTracks() a stored album entry back into playable tracks.
 #   libraryAlbum()  a library entry's album found again after a rescan, retag or move, its names
 #                   following the library's; sweepTick() runs every library entry through it
@@ -127,6 +128,15 @@ sub _str {
 
 sub _first { for (@_) { my $s = _str($_); return $s if defined $s } return undef }
 
+# A Radio Paradise block that RP's own plugin treats as an announcement (see describe).
+sub _rpAnnouncement {
+    my ($song, $d) = @_;
+    return 1 if (eval { $song->streamUrl } // '') =~ m{/dj/};
+    return 1 if ($d->{title}  // '') =~ /listener-?supported/i;
+    return 1 if ($d->{artist} // '') =~ /commercial-?free/i;
+    return 0;
+}
+
 # Does this url play song after song on ONE url? LMS's own test: the handler's isRepeatingStream
 # (Radio Paradise). There the url does not identify a song, the title does.
 sub sharesUrl {
@@ -246,6 +256,12 @@ sub describe {
         $d{year}    = $y if defined $y && !ref $y && $y =~ /^\d{4}$/;
         $d{artwork} = _first(@{$meta}{qw(cover image icon artwork_url)});
         $d{duration} = trackDuration($client, $song, $url, 1, $meta);
+
+        # Radio Paradise's station breaks ("Listener-supported" by "Commercial-free") and DJ talk
+        # are blocks like any song, with a length. Not music: skipped by the RP plugin's OWN rule
+        # (API.pm, the announcements it checks before playing): a /dj/ block url (it sets the block
+        # url as the song's streamUrl), or that title or artist. Simon, 2026-09-24.
+        return (undef, 'a Radio Paradise announcement') if $source eq 'radioparadise' && _rpAnnouncement($song, \%d);
 
         $d{is_station} = isStation($source, $d{duration}, 1);
 

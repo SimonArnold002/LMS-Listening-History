@@ -68,7 +68,7 @@ PLUGIN_LH_GAP
 	EN	Album session gap
 
 PLUGIN_LH_GAP_DESC
-	EN	Two tracks from the same album played back to back become one album entry. If more than this many minutes pass between them, the second starts a new entry.
+	EN	Two tracks from the same album played back to back become one album entry. If more than this many minutes pass between them, the second starts a new entry. Time spent paused doesn't count.
 
 PLUGIN_LH_SECTION_STORAGE
 	EN	Storage
