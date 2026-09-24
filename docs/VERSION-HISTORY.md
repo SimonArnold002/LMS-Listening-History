@@ -273,7 +273,7 @@ Four reports from Simon, one build. Ledger: `A PAUSE IS NOT A GAP`, `THE LENGTH 
 - Zip sha `54b0ccb471fa49a96987c69a5b097556b4e6d59b` (earlier builds `de3bf3ec…`, `cfdcde49…`, all 1.0.15, none pushed or installed). CHANGELOG /
   README wait for the merge to `main`.
 
-## Next (dev, not built; after 1.0.15) — library albums found again after a rescan
+## 1.0.16 — 2026-09-24 (dev, built: zip 34d9c573…, not installed) — library albums found again after a rescan
 
 Asked for by Simon 2026-09-24, from comparing Material's Recently Played: "follow what LMS does".
 

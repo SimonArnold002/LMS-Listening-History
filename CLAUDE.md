@@ -476,7 +476,7 @@ Not defects and not decisions. Re-raise one only by disproving the evidence it c
   setting (~104) is the time between tracks NOT counting a pause; the "Record internet radio" setting row
   (~105) is removed; "Radio detection is by stream type" (~114). CHANGELOG: one entry for the release.
 
-- **THE RELINK IS UNVERIFIED LIVE (2026-09-24).** `libraryAlbum` is proven against stubs only.
+- **THE RELINK IS UNVERIFIED LIVE (2026-09-24, built as 1.0.16, not installed).** `libraryAlbum` is proven against stubs only.
   Live check to run once installed: play 2 tracks of a library EP, retag its album title (or clear
   and rescan), rescan, open the entry → the whole EP plays and By release shows it as EP; the log
   says `album <old> is now <new> (found by …)`.
