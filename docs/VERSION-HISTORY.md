@@ -273,7 +273,7 @@ Four reports from Simon, one build. Ledger: `A PAUSE IS NOT A GAP`, `THE LENGTH 
 - Zip sha `54b0ccb471fa49a96987c69a5b097556b4e6d59b` (earlier builds `de3bf3ec…`, `cfdcde49…`, all 1.0.15, none pushed or installed). CHANGELOG /
   README wait for the merge to `main`.
 
-## 1.0.16 — 2026-09-24 (dev, built: zip 34d9c573…, not installed) — library albums found again after a rescan
+## 1.0.16 — 2026-09-24 (dev, built: zip 34d9c573…, installed + VERIFIED LIVE) — library albums found again after a rescan
 
 Asked for by Simon 2026-09-24, from comparing Material's Recently Played: "follow what LMS does".
 
@@ -295,9 +295,11 @@ Asked for by Simon 2026-09-24, from comparing Material's Recently Played: "follo
   - An old single-track entry never captures the keys (its row plays the file directly), so after
     a MOVE its release type is not recovered.
   - Step 5 is LMS's own guess by name.
-  - UNVERIFIED LIVE.
+- VERIFIED LIVE the same day: a retag ("At Sea (Single)" → "bollocks", new album 46646) relinked the
+  entry by its played files, and after a full clear and rescan all 11 library album entries still
+  opened their whole album under the new ids. The row kept its old name, which led to 1.0.17.
 
-## 1.0.17 — 2026-09-24 (dev, built: zip 00fab66e…, not installed) — history follows the library
+## 1.0.17 — 2026-09-24 (dev, built: zip 00fab66e…, installed + VERIFIED LIVE) — history follows the library
 
 Asked for by Simon after the live retag test on 1.0.16. The entry was relinked correctly, but its row
 kept the old name.
@@ -315,3 +317,23 @@ kept the old name.
 - Closes the 1.0.16 residual: old single-track entries now capture the keys in the sweep.
 - Tests: `t_browse.pl` "names:", "sweep:" and "plugin:" (483 assertions in total); 12 mutations,
   each red.
+- VERIFIED LIVE 2026-09-24 (server up 11:54:10): opening one "At Sea (Single)" row renamed it to
+  "Bollocks" at once. At +120s the sweep logged `library check done — 12 entries, 1 found their album
+  again, 0 renamed` and fixed the other row, including its cover. A rename made during a relink is
+  counted as "found", not "renamed" (commented at `%SWEEP`, no code change). Until the sweep reaches
+  an unopened stale row, it shows the old name and LMS's placeholder cover.
+
+## 1.0.18 — 2026-09-24 (dev, built: zip 1092d2c7…, not installed) — By release no longer searches
+
+From the /code-review of 1.0.16–1.0.17 (ledger §C, review round 2026-09-24).
+
+- `Sources::releaseType` no longer calls `libraryAlbum`. By release reads each library release's
+  row id alone (`find`), as before 1.0.16. Searching there ran several queries per stale release on
+  every By release view (the top list and each type's list), all through a rescan, and for good for
+  an album gone from the library. A stale release reads as ALBUM until the sweep (sent on every scan
+  end, measured in the LMS source) or an open finds it again. Ledger `A LIST RENDER DOES NOT SEARCH`.
+- `libraryAlbum` with no mode has no plugin caller now; its comment says so.
+- `DB.pm`: `plays`' comment moved back above `plays`; `libraryAfter`'s names `Sources::sweepTick`.
+- Tests: `t_browse.pl` "CONTROL relink: a list render does not search" (0 lookups) and "and writes
+  nothing", both RED with the 1.0.16 line put back. 485 assertions.
+- Zip sha `1092d2c7cec6dae722be7f6b26d38a500b6aa6f9`. CHANGELOG / README wait for the merge to `main`.

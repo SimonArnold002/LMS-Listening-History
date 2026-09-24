@@ -449,13 +449,25 @@ sub unlike_ { my ($d, $got, $re) = @_; is($d, (defined $got && $got !~ $re) ? 1 
                 ref => { album_id => 900, album_mbid => $M },
                 plays => [ { url => 'file:///old/ep/1', title => 'E1' }, { url => 'file:///old/ep/2', title => 'E2' } ]);
     my $pa = $plays->($a);
+    # a list render (By release asks releaseType of every release) reads the row id only: no search,
+    # no write. The sweep after the rescan, or opening the entry, finds it again.
+    my $ra0 = $row->($a);
+    {
+        my $calls = 0;
+        no warnings 'redefine';
+        local *Slim::Schema::search       = do { my $o = \&Slim::Schema::search;       sub { $calls++; $o->(@_) } };
+        local *Slim::Schema::objectForUrl = do { my $o = \&Slim::Schema::objectForUrl; sub { $calls++; $o->(@_) } };
+        is('CONTROL relink: a list render does not search for a stale album',
+           $S->can('releaseType')->($DB->can('get')->($a)) . " after $calls lookups", 'ALBUM after 0 lookups');
+    }
+    is('CONTROL relink: and writes nothing', $row->($a), $ra0);
+    is('relink album MBID: opening it replays the whole album', $urls->($a), 'file:///new/ep/1,file:///new/ep/2');
     is('relink album MBID: the type is back', $S->can('releaseType')->($DB->can('get')->($a)), 'EP');
     my $ea = $DB->can('get')->($a);
     is('relink album MBID: the row points at the new album', $ea->{ref}{album_id}, 301);
     is('relink album MBID: the session key follows', $ea->{album_key}, 'lib:301');
     is('relink album MBID: the cover is the new album\'s', $ea->{artwork}, '/music/cv301/cover');
     is('relink album MBID: the plays are untouched', $plays->($a), $pa);
-    is('relink album MBID: and the next read replays the whole album', $urls->($a), 'file:///new/ep/1,file:///new/ep/2');
 
     # step 2, one release split into two albums (a disc each): the one this entry played.
     my $M2 = 'aaaaaaaa-0000-0000-0000-000000000002';
@@ -564,7 +576,8 @@ sub unlike_ { my ($d, $got, $re) = @_; is($d, (defined $got && $got !~ $re) ? 1 
                  plays => [ { url => 'file:///rn/1', title => 'Old One', album => 'At Sea (Single)' },
                             { url => 'file:///rn/2', title => 'Old Two', album => 'At Sea (Single)' } ]);
     my $pra = $plays->($ra);
-    is('names: a relink on a list render', $S->can('releaseType')->($DB->can('get')->($ra)), 'SINGLE');
+    $urls->($ra);
+    is('names: a relink (opened) brings the type back', $S->can('releaseType')->($DB->can('get')->($ra)), 'SINGLE');
     my $er = $DB->can('get')->($ra);
     is('names: the album entry takes the new title', $er->{album}, 'bollocks');
     is('names: … the album artist', $er->{artist}, 'New Band');

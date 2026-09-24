@@ -394,9 +394,8 @@ sub search {
         [ ($pat) x 5 ]);
 }
 
-# The tracks that were played for an entry, in the order they were played.
 # Library entries after $afterId, oldest id first, at most $limit: the rescan sweep's cursor
-# (Sources::_sweepTick). Keyed on id, not played_at, so an entry played while the sweep runs
+# (Sources::sweepTick). Keyed on id, not played_at, so an entry played while the sweep runs
 # neither repeats nor is skipped.
 sub libraryAfter {
     my ($afterId, $limit) = @_;
@@ -408,6 +407,7 @@ sub libraryAfter {
     return [ map { _decode($_) } @{ $rows || [] } ];
 }
 
+# The tracks that were played for an entry, in the order they were played.
 sub plays {
     my ($id) = @_;
     my $h = dbh() or return [];

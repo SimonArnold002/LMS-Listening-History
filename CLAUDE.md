@@ -7,13 +7,16 @@ else with a protocol handler). A played album is ONE entry, not one per track; a
 a track entry. Radio stations are NOT recorded (since 1.0.15); Radio Paradise, which names each
 song, is recorded song by song. Every entry plays again,
 streaming included. Material home shelf of the latest 50 entries; app menu to look back by date,
-artist, album, service, player, or search by text, date or date range; every list sortable. Stores its own SQLite DB. Targets LMS 9.x, Material
+artist, album, service, player, or search by text, date or date range; every list sortable. Library entries
+follow the library: after a rescan, retag or move they find their album again and take its current names
+(since 1.0.16 / 1.0.17). Stores its own SQLite DB. Targets LMS 9.x, Material
 Skin preferred. Built 2026-09-18 from Simon's brief, in the shape of Listen Later / LBF / PFR.
 
 ## Branches and releasing
 - **1.0.4 is the first release**: merged to `main` and tagged `v1.0.4` on 2026-09-19. **1.0.5** (year search,
   By date years) released and tagged `v1.0.5` the same day. **1.0.7** (By release by type, Qobuz `epmini`)
-  released and tagged `v1.0.7` the same day.
+  released and tagged `v1.0.7` the same day. **1.0.14** (restart carry-on, service titles, track rows) released
+  2026-09-21: merge `765f0d0`, tag `v1.0.14`.
 - Work happens on `dev`. `dev` mirrors `main` except for ONE line, the `repo.xml` `<url>`:
   - main: `https://simonarnold002.github.io/LMS-Listening-History/ListeningHistory.zip` (Pages)
   - dev: `https://raw.githubusercontent.com/SimonArnold002/LMS-Listening-History/dev/ListeningHistory.zip`
@@ -61,8 +64,9 @@ grep -n "_record\|album_key" CLAUDE.md
 | app/shelf logo `ListeningHistoryIcon` = Google `music_history`, not Material's `history` glyph | **KEPT by Simon 2026-09-18** | `THE LOGO STAYS` |
 | "More by this artist" context entry | DROPPED at build; By artist covers it | `MORE BY THIS ARTIST` |
 | stale library `ref.album_id` replays the WRONG album (`resolveTracks`, `_libraryTracks`, `_libraryReleaseType`) | **DISPROVEN 2026-09-23** — §A3: `albums.id` is AUTOINCREMENT, never reused | `AN ALBUM ID IS NEVER REUSED` |
-| a stale library album found again: `Sources::libraryAlbum`, `DB::relinkLibrary`, ref `album_mbid` / `track_mbid` / `album_url` | **DECIDED by Simon 2026-09-24**: "follow what LMS does" — row id, album MBID, files, track MBID, LMS's album url | `FOUND AGAIN THE WAY LMS FINDS IT` |
-| history follows the library: `Sources::_nameChanges` (album / artist / title / year), the rescan sweep `startSweep` / `sweepTick` / `DB::libraryAfter`, `Plugin::_onRescanDone` | **DECIDED by Simon 2026-09-24** (after the live retag test): names follow the library, swept after every rescan | `HISTORY FOLLOWS THE LIBRARY` |
+| a stale library album found again: `Sources::libraryAlbum`, `DB::relinkLibrary`, ref `album_mbid` / `track_mbid` / `album_url` | **DECIDED by Simon 2026-09-24**: "follow what LMS does" — row id, album MBID, files, track MBID, LMS's album url; VERIFIED LIVE on 1.0.16 (retag + full clear and rescan) | `FOUND AGAIN THE WAY LMS FINDS IT` |
+| history follows the library: `Sources::_nameChanges` (album / artist / title / year), the rescan sweep `startSweep` / `sweepTick` / `DB::libraryAfter`, `Plugin::_onRescanDone` | **DECIDED by Simon 2026-09-24** (after the live retag test): names follow the library, swept after every rescan; VERIFIED LIVE on 1.0.17 | `HISTORY FOLLOWS THE LIBRARY` |
+| `releaseType` searching for a stale album on a By release render | **FIXED 2026-09-24** (review): a list render reads the row id only; the sweep / an open finds it again | `A LIST RENDER DOES NOT SEARCH` |
 | a track MBID names one album (`_byTrackMbid`) | **DISPROVEN 2026-09-24** — §A3: it is the RECORDING id, it repeats on compilations | `A TRACK MBID IS A RECORDING` |
 | Tidal/Deezer/Spotify album nodes, live Material rendering, the 1.0.15 pause / length / RP paths | **UNVERIFIED LIVE** — §B | `UNVERIFIED LIVE` |
 
@@ -398,8 +402,10 @@ can be DISPROVEN. Closing a round is not a suppression.
   `lib:<old>`, artwork refreshed, `plays` never touched). There is no write during
   `Import->stillScanning`. No schema change: the keys live in `ref_json`. The keys are recorded at
   play time (`describe`). An entry recorded before them gets them when it is OPENED
-  (`resolveTracks`, capture on), never while a list renders (`releaseType` in By release: one write
-  per group would stall the first By release view). Accepted residual: step 5 is LMS's guess by
+  (`resolveTracks`, capture on) or SWEPT. A list render never searches at all: `releaseType` (By
+  release asks it of every release) reads the row id alone, and a stale release reads as its stored
+  type or ALBUM until the sweep or an open finds it again (`A LIST RENDER DOES NOT SEARCH`, §C
+  2026-09-24). Accepted residual: step 5 is LMS's guess by
   name (first match, as a favourite), used only after every exact key has failed. (The residual
   once stated here, that an old single-TRACK entry never captured the keys, is CLOSED by the
   sweep in `HISTORY FOLLOWS THE LIBRARY`.) Guard:
@@ -415,9 +421,9 @@ can be DISPROVEN. Closing a round is not a suppression.
     takes the album and year, plus its own track's title and artist when its file is on that album.
     Values are trimmed as `describe` trims. The play log (`plays`) is never touched: it keeps what
     was heard.
-  - When: on a relink (any mode, including a list render), and on an entry being OPENED
-    (`resolveTracks`, mode `open`) or SWEPT (mode `sweep`). A list render never renames an album
-    that is still there.
+  - When: on an entry being OPENED (`resolveTracks`, mode `open`) or SWEPT (mode `sweep`), whether
+    its album was found again or is still there. A list render never renames anything: it does not
+    call `libraryAlbum` (`A LIST RENDER DOES NOT SEARCH`).
   - The sweep: `['rescan','done']` (sent by `Slim::Music::Import` when a scan ends or is aborted)
     and once 120s after startup. It walks every library entry by id cursor, 25 per tick, 1s apart.
     While a scan runs it waits 30s and carries on from the same place. It also captures the lasting
@@ -426,6 +432,11 @@ can be DISPROVEN. Closing a round is not a suppression.
   - Accepted costs: every restart re-walks the library entries (a `find` each, plus one track
     lookup per track entry). An entry whose album cannot be found repeats steps 2–5 on every sweep.
     Neither writes.
+  - The summary line counts an entry once: a relink that also renamed it is counted under "found
+    their album again", so "0 renamed" beside "1 found" can still mean a row changed its name.
+  - Until the sweep reaches it, an unopened stale entry shows its old name, and its cover is LMS's
+    placeholder (its stored coverid is gone). Opening the entry fixes it at once. VERIFIED LIVE on
+    1.0.17, §B.
   - Guard: `t_browse.pl` "names:", "sweep:" and "plugin:"; 12 mutations, each red.
 
 ### A3. DISPROVEN — beliefs the code suggests and a measurement killed
@@ -508,10 +519,42 @@ Not defects and not decisions. Re-raise one only by disproving the evidence it c
   So each one was found again through its lasting keys. No Listening History errors in the log. One
   expected difference: the older "At Sea (Single)" entry's cover moved from the stale pre-retag
   coverid to the current one (refreshed by the relink).
-  STILL UNVERIFIED LIVE: the 1.0.17 sweep and names. Both "At Sea (Single)" rows should become
-  "bollocks" about 2 minutes after install, and the log should say `library check done — …`.
+  **1.0.17 SWEEP + NAMES VERIFIED LIVE (2026-09-24, server up 11:54:10).** Opening the first "At Sea
+  (Single)" row renamed it to "Bollocks" (album 49586) with the new cover at once, before the sweep
+  ran. At 11:56:11 (+120s) the log said `library check done — 12 entries, 1 found their album again,
+  0 renamed`, and the second row then read "Bollocks" too, with the real cover in place of the
+  placeholder PNG its stale coverid had served. Until the sweep runs, an unopened stale row shows its
+  old name and a placeholder cover; that is the ~2 minute wait Simon saw, not a fault. The count
+  reports a rename that rides on a relink under "found their album again", not under "renamed".
+  The failed plays at the same time were HQPlayer (MacMini) being offline (`PlaylistAdd refused`),
+  not this plugin.
 
 ### C. CLOSED FINDINGS
+
+**Review round 2026-09-24 (`74013de~1..063e1d8` + the uncommitted doc edits, /code-review) — CLOSED,
+two findings, both FIXED and BUILT as 1.0.18 (not installed; UNVERIFIED LIVE, nothing to see beyond
+By release staying quick during a rescan).**
+1. **A LIST RENDER DOES NOT SEARCH — `Sources::releaseType`, `Browse::_releaseGroups`.** Since 1.0.16
+   `releaseType` called `libraryAlbum($e)`, so every By release view (the top list AND each type's
+   list: `_releaseGroups` runs for both, over every release in the history) ran steps 2–5 for every
+   stale library release: a `plays` read, one `objectForUrl` per played file, two MBID searches and the
+   album-url lookup, blocking the server. Through a whole rescan nothing is stored
+   (`stillScanning`), so each view repeated it for every entry; an album gone from the library paid
+   it on every view for good. Before 1.0.16 it was one `find`. FIX: `releaseType` reads the row id
+   alone (`find`), exactly the pre-1.0.16 cost; finding again is left to the sweep and to an open.
+   Knock-on checked: (a) the sweep is the repair path, and `['rescan','done']` is sent on EVERY scan
+   end, measured in the LMS 9.1 source: `SQLiteHelper::_notifyFromScanner` on the scanner's `exit`
+   (normal end, and an exit without `end`), `Import::abortScan`, and `Import::stillScanning` when the
+   scanner process died; plus the startup sweep. (b) Library entries store no `release_type`
+   (`describe` stores it for Qobuz only), so a stale library EP / single reads as ALBUM from the
+   rescan's end until the sweep reaches it (10s + 1s per 25 entries), as it did permanently before
+   1.0.16. (c) `libraryAlbum` with no mode now has no plugin caller; kept for the suites, doc says so.
+   (d) Names, artwork, `album_key` and the play log are written only by `open` / `sweep`, unchanged.
+   (e) `resolveTracks` (one entry, on a tap) still searches, by design. Guard: `t_browse.pl` "CONTROL
+   relink: a list render does not search" (counts `search` + `objectForUrl` calls: 0) and "and writes
+   nothing"; both RED with the 1.0.16 line put back. 485 assertions green.
+2. `DB::libraryAfter` had been inserted between `plays`' comment and `plays`, and named
+   `Sources::_sweepTick` (it is `sweepTick`). FIXED: comment moved back, name corrected.
 
 **Third review round 2026-09-23 (`874e991~1..963a417`, /code-review) — CLOSED, NO findings.** Checked and
 CLEARED (do not re-derive): the station early-return moved below the resume branch still ignores a no-length
@@ -678,7 +721,7 @@ V=1 perl tools/t_tracker.pl
 |---|---|
 | `t_tracker.pl` | the lasting keys (`album_mbid`, `track_mbid`, `album_url`) recorded and kept by a promotion, untagged / malformed MBID not stored; the grouping rules end to end through the real callback + timers: one track, album promotion, A/B/A, stop, same url, gap, two players, skip, pause, Qobuz id grouping, first-credit grouping, Spotty error text, radio timed once and NOT recorded (+ the deadline; ends the album session), a web track with no length at start is not timed as radio (skip at 61s of 300 not recorded), removed-mid-album, a server restart (album carries on, resumed track once, long track, before-count, single track, deliberate replay, other album, stop, gap control, other player, radio), a local resume at an offset vs a seek control, a streaming restart from the top, a service track titled by its handler (+ no-title control), a plain web track keeping its own title and not the split's artist (+ real-artist control), 1.0.15: a pause (streaming re-stream keeps its mark, after-count, local pause clock, mid-track, skip while paused, 4 controls; seek while paused; seek then pause credits only what played + two-resume control), the length re-read at every check (late length, no length yet, Radio Paradise per song + restart title check, RP-only title check vs a service title fallback, RP after a station guess) |
 | `t_db.pl` | `relinkLibrary` (compare-and-set, keys merged, unknown key dropped, `album_key` only from `lib:<old>`, artwork kept when none given, plays untouched, non-library / missing / non-numeric refused), schema stamp + re-open, promote in one transaction, no orphan play on a missing entry, literal `%`/`_` search, indexes, forDay injection, remove/purge cascade, a failed COMMIT reported as failure by addToEntry/remove/purge |
-| `t_browse.pl` | names follow the library (album / track entry, play log kept, By artist, never on a list render for a live album, not rewritten when unchanged), the rescan sweep (waits during a scan, batches, relinks + renames + captures, streaming untouched, log line, stopSweep), plugin wiring (rescan done subscribed, startup check armed, shutdown), a library album found again (`libraryAlbum`: album MBID incl. a split release, files, track MBID + the compilation control, LMS album url incl. non-ASCII and the old-track-entry control, files on two albums, nothing resolves, scan = no write, compare-and-set, valid id captured on open but not on a list render), shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is "Title by Artist from Album" on the web skins and "Title from Album" over the artist on Material (each clause dropped alone; no artist = no second line), a station has no second line, By release (type rows in LMS order and names with counts, each opening its releases; library type read LIVE incl. Material's compilation rule, Qobuz type stored; LMS's releaseTypeName preferred) and its tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), year search (the Played in row above the text matches, ranges, a numeric name) and By date years (All of + months), context menu + remove, settings clamps (no `record_radio`) |
+| `t_browse.pl` | names follow the library (album / track entry, play log kept, By artist, never on a list render for a live album, not rewritten when unchanged), the rescan sweep (waits during a scan, batches, relinks + renames + captures, streaming untouched, log line, stopSweep), plugin wiring (rescan done subscribed, startup check armed, shutdown), a library album found again (`libraryAlbum`: album MBID incl. a split release, files, track MBID + the compilation control, LMS album url incl. non-ASCII and the old-track-entry control, files on two albums, nothing resolves, scan = no write, compare-and-set, valid id captured on open but not on a list render, a list render never searches for a stale album: 0 lookups, no write), shelf exactly 50 and flat and stable, row types, library album = whole album, no-id album = recorded tracks, Qobuz info rows dropped and empty-answer fallback, search dispatch + item_id gate, Yesterday across the spring clock change, album rows read Album over Artist and nothing else, a track row is "Title by Artist from Album" on the web skins and "Title from Album" over the artist on Material (each clause dropped alone; no artist = no second line), a station has no second line, By release (type rows in LMS order and names with counts, each opening its releases; library type read LIVE incl. Material's compilation rule, Qobuz type stored; LMS's releaseTypeName preferred) and its tiles (album over artist, the latest play's badge, library control), the service badge (extid) per source, the sort row (cycle, live-pref step, blank last, shelf unaffected, bogus pref), By service (+ the tile, one row per label, Deezer vs Deezer podcasts, http+https merged), the sort row's web-skin bounce, date search (every accepted form, ranges both ways, rejects, inclusive bounds), year search (the Played in row above the text matches, ranges, a numeric name) and By date years (All of + months), context menu + remove, settings clamps (no `record_radio`) |
 | `t_load.pl` | every module loads; every `Plugins::ListeningHistory::X::y` call is defined |
 
 Version history: `docs/VERSION-HISTORY.md`.

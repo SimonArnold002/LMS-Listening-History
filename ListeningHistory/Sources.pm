@@ -517,8 +517,9 @@ sub _nameChanges {
 
 # The live LMS album of a library entry, or undef (in list context also what was written:
 # 'relinked', 'renamed' or ''). $mode:
-#   undef    a list being rendered (releaseType): a stale album is found again and written back,
-#            names included, but an entry whose album is still there is only read.
+#   undef    find a stale album again and write it back, names included; an entry whose album is
+#            still there is only read. No plugin caller uses it (a list render, releaseType, reads
+#            the row id alone); the suites drive the search through it.
 #   'open'   one entry being opened (resolveTracks), and
 #   'sweep'  the pass after a rescan (sweepTick): also store the lasting keys an entry recorded
 #            before them lacks, and bring its names in line with the library's.
@@ -586,7 +587,8 @@ use constant SWEEP_BATCH => 25;
 use constant SWEEP_GAP   => 1;
 use constant SWEEP_WAIT  => 30;
 
-my %SWEEP;   # { after => last entry id done, seen, relinked, renamed } while a sweep is under way
+my %SWEEP;   # { after => last entry id done, seen, relinked, renamed } while a sweep is under way;
+             # a relink that also renamed counts once, as relinked
 
 sub startSweep {
     my ($delay) = @_;
@@ -672,8 +674,12 @@ sub resolveTracks {
 # ---------------------------------------------------------------------------
 
 # The type of a stored entry's release. The LIBRARY is read live from LMS, so every entry
-# already in the history has one and a retag + rescan moves it (libraryAlbum finds the album
-# again when the rescan renumbered it; this is a list render, so it relinks but never captures). QOBUZ is what fetchReleaseType
+# already in the history has one and a retag + rescan moves it. This is a list render (By release
+# asks it of every release), so it reads the row id and nothing more: an album a rescan renumbered
+# is found again by the sweep after that rescan, or by opening the entry (libraryAlbum), and until
+# then its release reads as the stored type or ALBUM. Searching here cost a handful of queries per
+# stale release on every By release view, all through a rescan (nothing is stored while it runs)
+# and forever for an album that has left the library. QOBUZ is what fetchReleaseType
 # stored when it played. Nothing else states a type (Tidal, Deezer and Spotify only through
 # their plugins' internals — declined fleet-wide, see the streaming-service-apis note), so
 # everything else is ALBUM, which is also what Material assumes for a release with no type.
@@ -682,7 +688,7 @@ sub releaseType {
     return 'ALBUM' unless ref $e eq 'HASH';
     my $ref = ref $e->{ref} eq 'HASH' ? $e->{ref} : {};
     if (($e->{source} // '') eq 'library' && $ref->{album_id}) {
-        my $t = _libraryReleaseType(scalar libraryAlbum($e));
+        my $t = _libraryReleaseType(scalar eval { Slim::Schema->find('Album', $ref->{album_id}) });
         return $t if $t;
     }
     return _normType($ref->{release_type}) || 'ALBUM';
