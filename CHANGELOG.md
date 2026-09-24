@@ -3,6 +3,24 @@
 User-facing release notes, written at each merge to `main`. Per-build engineering notes live in
 `docs/VERSION-HISTORY.md`.
 
+## 1.0.18 — 2026-09-24
+
+Your history now keeps up with your library, a pause no longer splits an album, and Radio Paradise records every song.
+
+### Improvements
+- **Library entries find their album again after a rescan.** After *Clear library and rescan*, a retag or moving your files, an album gets a new place in LMS's library. Before, its entry could then only replay the tracks you'd heard, and an EP or single moved under *Albums*. Now the entry finds its album the way LMS finds a favourite: by the album's MusicBrainz id where your files have one, otherwise by the files you played, otherwise by album and artist name. Your existing history is kept and nothing is merged or deleted.
+- **Names follow your library.** Retag an album and its entries take the new title, artist and year. A track entry also takes its track's new title and artist. The tracks recorded inside an entry keep the names you heard them under.
+- **Checked after every rescan.** Every library entry is checked shortly after each rescan finishes, and two minutes after the server starts, so the changes appear without you opening anything. An entry you open is checked straight away.
+- **Radio Paradise is recorded song by song**, each song a track with its own title and artist.
+
+### Fixes
+- **A pause no longer splits an album.** Time spent paused doesn't count towards the 30-minute gap. A streaming track paused part way through still counts once the rest has played, instead of being lost.
+- **Radio Paradise no longer misses songs.** A song shorter than the one before it was never recorded, because its length wasn't known yet when it started.
+- **Streaming tracks that report their length late are counted at 90%**, instead of after 60 seconds.
+
+### Changes
+- **Internet radio stations are no longer recorded**, and the *Record internet radio* setting has gone. Radio Paradise is the exception. Station entries already in your history stay there and still play.
+
 ## 1.0.14 — 2026-09-21
 
 A server restart no longer splits your history, and track entries show the right title and artist.
