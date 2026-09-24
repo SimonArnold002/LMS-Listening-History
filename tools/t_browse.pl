@@ -391,6 +391,22 @@ POSIX::tzset();
 
 # --- context menu + remove --------------------------------------------------------------------------------
 main::lh_require('Plugin');
+{
+    my @before = @Slim::Control::Request::SUBSCRIBED;
+    Slim::Utils::Timers::clear();
+    Plugins::ListeningHistory::Plugin->postinitPlugin;
+    my ($rescan) = grep { ref $_->[1] eq 'ARRAY' && ($_->[1][0][0] // '') eq 'rescan' } @Slim::Control::Request::SUBSCRIBED;
+    ok('plugin: listens for the end of a rescan', $rescan && $rescan->[1][1][0] eq 'done');
+    ok('plugin: a check is armed after startup',
+       grep { $_->{cb} == \&Plugins::ListeningHistory::Sources::sweepTick && $_->{when} >= time() + 100 } @Slim::Utils::Timers::ARMED);
+    Slim::Utils::Timers::clear();
+    $rescan->[0]->();
+    ok('plugin: a rescan arms the check', grep { $_->{cb} == \&Plugins::ListeningHistory::Sources::sweepTick } @Slim::Utils::Timers::ARMED);
+    Plugins::ListeningHistory::Plugin->shutdownPlugin;
+    ok('plugin: shutdown stops listening', !grep { $_->[0] == $rescan->[0] } @Slim::Control::Request::SUBSCRIBED);
+    ok('plugin: … and disarms the check', !grep { $_->{cb} == \&Plugins::ListeningHistory::Sources::sweepTick } @Slim::Utils::Timers::ARMED);
+    Slim::Utils::Timers::clear();
+}
 { package FakeReq; sub new { bless { p => $_[1], loop => [] }, $_[0] }
   sub client {} sub getParam { $_[0]{p}{$_[1]} } sub setStatusDone { $_[0]{done} = 1 }
   sub addResult {} sub addResultLoop { my ($s, $l, $i, $k, $v) = @_; $s->{loop}[$i]{$k} = $v } }
@@ -537,6 +553,84 @@ sub unlike_ { my ($d, $got, $re) = @_; is($d, (defined $got && $got !~ $re) ? 1 
     is('valid id: and the track MBID', $ev->{ref}{track_mbid}, 'dddddddd-0000-0000-0000-000000000001');
     is('valid id: and LMS\'s album url', $ev->{ref}{album_url}, 'db:album.title=Plain%20LP&contributor.name=Y');
     is('valid id: the session key is unchanged', $ev->{album_key}, 'lib:302');
+
+    # names follow the library (Simon, 2026-09-24): a retag renames the row. The play log keeps what
+    # was heard.
+    Slim::Schema::add_test_album(320, ['Renamed One', 'file:///rn/1'], ['Renamed Two', 'file:///rn/2']);
+    $Slim::Schema::ALBUM_META{320} = { title => 'bollocks', artist => 'New Band', year => 2025, release_type => 'SINGLE' };
+    $Slim::Schema::TRACK_ARTIST{'file:///rn/1'} = 'New Band feat. X';
+    my $ra = add(kind => 'album', artist => 'Old Band', album => 'At Sea (Single)', year => 2019, url => 'file:///rn/1',
+                 ref => { album_id => 912 },
+                 plays => [ { url => 'file:///rn/1', title => 'Old One', album => 'At Sea (Single)' },
+                            { url => 'file:///rn/2', title => 'Old Two', album => 'At Sea (Single)' } ]);
+    my $pra = $plays->($ra);
+    is('names: a relink on a list render', $S->can('releaseType')->($DB->can('get')->($ra)), 'SINGLE');
+    my $er = $DB->can('get')->($ra);
+    is('names: the album entry takes the new title', $er->{album}, 'bollocks');
+    is('names: … the album artist', $er->{artist}, 'New Band');
+    is('names: … and the year', $er->{year}, 2025);
+    ok('names: an album entry gets no track title', !defined $er->{title});
+    is('names: the play log keeps what was heard', $plays->($ra), $pra);
+    is('names: By artist finds it under the new name', scalar(grep { $_->{id} == $ra } @{ $DB->can('forArtist')->('New Band') }), 1);
+    my $rt = add(artist => 'Old Band', album => 'At Sea (Single)', title => 'Old One', url => 'file:///rn/1', ref => { album_id => 913 });
+    $S->can('libraryAlbum')->($DB->can('get')->($rt));
+    my $et = $DB->can('get')->($rt);
+    is('names: a track entry takes its track\'s new title', $et->{title}, 'Renamed One');
+    is('names: … its track\'s artist', $et->{artist}, 'New Band feat. X');
+    is('names: … and the album', $et->{album}, 'bollocks');
+    # an album that is still there: renamed when OPENED (or swept), never on a list render.
+    my $rl = add(kind => 'album', artist => 'Old Band', album => 'Old Name', url => 'file:///rn/1', album_key => 'lib:320',
+                 ref => { album_id => 320, album_url => 'db:x' },
+                 plays => [ { url => 'file:///rn/1', title => 'Old One' } ]);
+    my $rrl = $row->($rl);
+    $S->can('releaseType')->($DB->can('get')->($rl));
+    is('CONTROL names: a list render does not rename a live album', $row->($rl), $rrl);
+    $urls->($rl);
+    is('names: opening it renames it', $DB->can('get')->($rl)->{album}, 'bollocks');
+    is('names: the id is untouched', $DB->can('get')->($rl)->{ref}{album_id}, 320);
+    is('names: an unchanged entry is not written again', scalar((sub { my $r = $row->($rl); $urls->($rl); $row->($rl) eq $r })->()), 1);
+    $DB->can('remove')->($_) for $ra, $rt, $rl;
+
+    # the sweep after a rescan: every library entry, in batches, without being opened.
+    my $sw1 = add(kind => 'album', artist => 'Old Band', album => 'Swept', url => 'file:///rn/1', ref => { album_id => 914 },
+                  plays => [ { url => 'file:///rn/1', title => 'Old One' } ]);                       # stale + renamed
+    my $sw2 = add(kind => 'album', artist => 'New Band', album => 'bollocks', year => 2025, url => 'file:///rn/2',
+                  ref => { album_id => 320, album_url => 'db:x' },
+                  plays => [ { url => 'file:///rn/2', title => 'Renamed Two' } ]);                   # already right
+    my $sw3 = add(kind => 'album', artist => 'Old Band', album => 'Live Old', url => 'file:///rn/2', ref => { album_id => 320 },
+                  plays => [ { url => 'file:///rn/2', title => 'Renamed Two' } ]);                   # live, renamed, keys captured
+    my $swq = add(kind => 'album', source => 'qobuz', artist => 'Q', album => 'Qob', url => 'qobuz://9.flac', ref => { svc_album_id => 'q9' });
+    my @more = map { add(title => "Filler $_", artist => 'F', url => "file:///fill/$_", ref => { album_id => 5 }) } 1 .. 30;
+    my ($r2, $rq) = ($row->($sw2), $row->($swq));
+    Slim::Utils::Timers::clear();
+    Slim::Utils::Log::clear();
+    {
+        local $Slim::Music::Import::SCANNING = 1;
+        $S->can('startSweep')->(0);
+        Slim::Utils::Timers::fire_timer(undef);
+        is('sweep: waits while a scan runs', $DB->can('get')->($sw1)->{ref}{album_id}, 914);
+        is('sweep: … and stays armed', scalar(@Slim::Utils::Timers::ARMED), 1);
+    }
+    my $ticks = 0;
+    $ticks++ while Slim::Utils::Timers::fire_timer(undef) && $ticks < 50;
+    ok('sweep: runs in batches, then stops', $ticks >= 2 && $ticks < 50 && !@Slim::Utils::Timers::ARMED);
+    my $e1 = $DB->can('get')->($sw1);
+    is('sweep: a stale album is found again', $e1->{ref}{album_id}, 320);
+    is('sweep: … and renamed', "$e1->{album}|$e1->{artist}", 'bollocks|New Band');
+    is('CONTROL sweep: an entry already right is not written', $row->($sw2), $r2);
+    my $e3 = $DB->can('get')->($sw3);
+    is('sweep: a live album is renamed', $e3->{album}, 'bollocks');
+    is('sweep: … and gains its lasting keys', $e3->{ref}{album_url}, 'db:album.title=bollocks&contributor.name=New%20Band');
+    is('CONTROL sweep: a streaming entry is left alone', $row->($swq), $rq);
+    ok('sweep: says what it did (a warning, as it changed something)',
+       grep { /^WARN .*library check done — \d+ entries, [1-9]\d* found their album again, 1 renamed/ } @Slim::Utils::Log::LINES);
+    ok('sweep: no entry failed', !grep { /checking entry .* failed/ } @Slim::Utils::Log::LINES);
+    $S->can('startSweep')->(0);
+    $S->can('stopSweep')->();
+    is('sweep: stopSweep disarms it', scalar(@Slim::Utils::Timers::ARMED), 0);
+    $DB->can('remove')->($_) for $sw1, $sw2, $sw3, $swq, @more;
+    delete $Slim::Schema::ALBUM_META{320}; delete $Slim::Schema::ALBUM_TRACKS{320};
+    %Slim::Schema::TRACK_ARTIST = ();
 
     $DB->can('remove')->($_) for $a, $d, $b, $c, $t, $t2, $n, $nt, $nu, $z, $sc, $cs, $v;
     delete @Slim::Schema::ALBUM_META{301 .. 308};

@@ -296,3 +296,22 @@ Asked for by Simon 2026-09-24, from comparing Material's Recently Played: "follo
     a MOVE its release type is not recovered.
   - Step 5 is LMS's own guess by name.
   - UNVERIFIED LIVE.
+
+## 1.0.17 — 2026-09-24 (dev, built: zip 00fab66e…, not installed) — history follows the library
+
+Asked for by Simon after the live retag test on 1.0.16. The entry was relinked correctly, but its row
+kept the old name.
+
+- `Sources::_nameChanges`: an album entry takes the album's title, album artist and year; a track
+  entry takes the album and year, plus its own track's title and artist. `plays` is never touched.
+- `libraryAlbum($e, $mode)`: a relink carries the names in every mode. Mode `open` or `sweep`
+  also renames a live album and captures the lasting keys. A list render (no mode) still only
+  reads a live album. In list context it returns `($alb, 'relinked' | 'renamed' | '')`.
+- New sweep: `startSweep` / `stopSweep` / `sweepTick` in Sources, and `DB::libraryAfter` (an id
+  cursor). `Plugin` runs it on `['rescan','done']` and 120s after startup, and stops it at
+  shutdown. 25 entries per tick, 1s apart; it waits while a scan runs; one summary log line at the
+  end.
+- `DB::relinkLibrary` also writes album / artist / title / year when given.
+- Closes the 1.0.16 residual: old single-track entries now capture the keys in the sweep.
+- Tests: `t_browse.pl` "names:", "sweep:" and "plugin:" (483 assertions in total); 12 mutations,
+  each red.

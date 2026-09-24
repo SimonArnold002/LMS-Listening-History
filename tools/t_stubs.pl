@@ -170,6 +170,7 @@ BEGIN { *CORE::GLOBAL::time = sub () { CORE::time() + ($TestClock::OFFSET || 0) 
     our %ALBUM_TRACKS;   # album id => [ [title, url], … ]
     our %ALBUM_META;     # album id => { release_type, compilation, musicbrainz_id, title, artist, artwork }
     our %TRACK_MBID;     # track url => recording MBID
+    our %TRACK_ARTIST;   # track url => its artist (artistName)
     sub add_test_album { my ($id, @tracks) = @_; $ALBUM_TRACKS{$id} = \@tracks }
     sub _album {
         my ($id) = @_;
@@ -209,6 +210,8 @@ BEGIN { *CORE::GLOBAL::time = sub () { CORE::time() + ($TestClock::OFFSET || 0) 
     package Slim::Schema::FakeAlbum;
     sub release_type { $_[0]->{release_type} } sub compilation { $_[0]->{compilation} }
     sub id { $_[0]->{id} } sub musicbrainz_id { $_[0]->{musicbrainz_id} } sub artwork { $_[0]->{artwork} }
+    sub title { $_[0]->{title} } sub year { $_[0]->{year} }
+    sub contributor { defined $_[0]->{artist} ? bless({ n => $_[0]->{artist} }, 'Slim::Schema::FakeContrib') : undef }
     sub url {
         my $s = shift;
         return undef unless defined $s->{title} && defined $s->{artist};
@@ -243,6 +246,9 @@ BEGIN { *CORE::GLOBAL::time = sub () { CORE::time() + ($TestClock::OFFSET || 0) 
     sub title { $_[0]->{title} } sub url { $_[0]->{url} }
     sub album { Slim::Schema::_album($_[0]->{album_id}) }
     sub musicbrainz_id { $Slim::Schema::TRACK_MBID{ $_[0]->{url} // '' } }
+    sub artistName { $Slim::Schema::TRACK_ARTIST{ $_[0]->{url} // '' } }
+    package Slim::Schema::FakeContrib;
+    sub name { $_[0]->{n} }
     $INC{'Slim/Schema.pm'} = __FILE__;
 }
 {
