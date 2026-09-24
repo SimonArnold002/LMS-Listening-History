@@ -514,7 +514,7 @@ Not defects and not decisions. Re-raise one only by disproving the evidence it c
     first track reaches 90%).
   - `Sources::isStation` — any remote non-service url with no duration is a station (timed, not recorded
     since 1.0.15). Not checked against TuneIn or BBC Sounds.
-  - `Sources::_rpAnnouncement` (1.0.19, built, not installed): the `/dj/` signal on `$song->streamUrl`. The
+  - `Sources::_rpAnnouncement` (1.0.19, INSTALLED 2026-09-24): the `/dj/` signal on `$song->streamUrl`. The
     station break ("Listener-supported" by "Commercial-free") was SEEN recorded live on 1.0.17, which is
     what the title/artist test matches; no DJ block has been seen yet.
   - `_albumNode` for Tidal, Deezer and Spotty (Qobuz is exercised with a stub only).
@@ -568,7 +568,7 @@ no write); a renumbered album reads ALBUM until the sweep or an open (library en
 new test's lookup counter catches the old path (it searches by album MBID through `Slim::Schema->search`).
 
 **Review round 2026-09-24 (`74013de~1..063e1d8` + the uncommitted doc edits, /code-review) — CLOSED,
-two findings, both FIXED and BUILT as 1.0.18 (not installed; UNVERIFIED LIVE, nothing to see beyond
+two findings, both FIXED and BUILT as 1.0.18 (running on the rig via 1.0.19; UNVERIFIED LIVE, nothing to see beyond
 By release staying quick during a rescan).**
 1. **A LIST RENDER DOES NOT SEARCH — `Sources::releaseType`, `Browse::_releaseGroups`.** Since 1.0.16
    `releaseType` called `libraryAlbum($e)`, so every By release view (the top list AND each type's

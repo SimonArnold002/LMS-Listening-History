@@ -323,7 +323,7 @@ kept the old name.
   counted as "found", not "renamed" (commented at `%SWEEP`, no code change). Until the sweep reaches
   an unopened stale row, it shows the old name and LMS's placeholder cover.
 
-## 1.0.18 — 2026-09-24 (dev, built: zip 1092d2c7…, not installed) — By release no longer searches
+## 1.0.18 — 2026-09-24 (built: zip 1092d2c7…, released; superseded on the rig by 1.0.19) — By release no longer searches
 
 From the /code-review of 1.0.16–1.0.17 (ledger §C, review round 2026-09-24).
 
@@ -338,7 +338,7 @@ From the /code-review of 1.0.16–1.0.17 (ledger §C, review round 2026-09-24).
   nothing", both RED with the 1.0.16 line put back. 485 assertions.
 - Zip sha `1092d2c7cec6dae722be7f6b26d38a500b6aa6f9`. CHANGELOG / README wait for the merge to `main`.
 
-## 1.0.19 — 2026-09-24 (dev, built: zip 9c156a9a…, not installed) — Radio Paradise breaks are not recorded
+## 1.0.19 — 2026-09-24 (built: zip 9c156a9a…, released, INSTALLED on the rig) — Radio Paradise breaks are not recorded
 
 Asked for by Simon 2026-09-24 after an entry "Listener-supported" by "Commercial-free" appeared.
 - `Sources::describe` skips a Radio Paradise block that RP's own plugin treats as an announcement
