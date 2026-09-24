@@ -111,6 +111,9 @@ can be DISPROVEN. Closing a round is not a suppression.
   RP's first song). Why stations never showed was not established (never checked live) and is moot.
   Old `station` rows in a db still render and replay (Browse unchanged). Radio Paradise is not a station:
   every song has a length, so it is recorded song by song as TRACK entries, source `radioparadise`.
+  ONLY its INTERACTIVE streams (the RP plugin's `radioparadise://` urls: a service scheme, per-song length,
+  `isRepeatingStream`). RP's REGULAR streams are plain http with no length or timeline, so `isStation` makes
+  them stations and they are NOT recorded, by design (Simon 2026-09-24; README + CHANGELOG say so).
   Guard: `t_tracker.pl` radio block (not recorded, timed once, ends the album session), `t_browse.pl`
   settings (pref gone).
 - **SHELF TITLE — Simon, 2026-09-18.** The Material home shelf (`HomeExtras`, `LHHome`) is titled
