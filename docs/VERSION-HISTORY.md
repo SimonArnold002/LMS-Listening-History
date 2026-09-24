@@ -239,3 +239,101 @@ round's two fixes (CLAUDE.md §C):
   the handler's artist when its artist and title rejoin to the track's own title; a real stream artist is kept.
 - Tests: `t_tracker` 95 → 98. Totals 323 (start of 2026-09-21) → 355 (t_browse 154, t_db 57, t_load 46, t_tracker 98).
 - Zip sha `29fd895040cdcb5c83264fef54dcc9fa4a7cf5d5`. CHANGELOG / README wait for the merge to `main`.
+
+## 1.0.15 — 2026-09-23 (dev, `874e991` onwards, pushed; reviews closed) — pauses, song lengths learnt late, radio
+
+Four reports from Simon, one build. Ledger: `A PAUSE IS NOT A GAP`, `THE LENGTH IS READ AT EVERY CHECK`,
+`RADIO IS NOT RECORDED`, `A RESTART IS NOT A NEW LISTEN`.
+- Pause: `Tracker` subscribes to `playlist pause`. The time paused no longer counts towards the session gap
+  (`_unpause`), and a paused streaming track that LMS re-streams from the pause point (a `newsong` on the same
+  url) keeps its mark, owing only what is left (`from` = `startOffset`, `_owed`). Was: Gia Margaret *Singing*
+  logged twice, the paused track in neither entry.
+- Length: `Sources::trackDuration` reads a remote track's length from its handler first; `_markTick` re-reads it
+  at every check and recomputes the target. A service track with no length yet waits rather than counting at
+  60s. Was: Radio Paradise songs shorter than 90% of the song before were never recorded (every song on one
+  url, LMS holding the previous length), and a queued streaming track with no length at its start was counted
+  at 60s.
+- Restart: the resumed-play drop also compares the title (`resumed_title`), for Radio Paradise's shared url.
+- Radio: stations are no longer recorded; `record_radio`, its settings row and three strings removed. Radio
+  Paradise is recorded song by song as before.
+- Tests: `t_tracker` 98 → 123 (shuffle, pause ×10, length ×2, RP ×6, radio rewritten); `t_browse` 154 (the
+  checkbox test replaced by a pref-gone check). 18 red on 1.0.14; mutations each red (clock shift 8, length
+  order 7, title check, mark kept 2). Totals 380.
+- Review of 1.0.15 (same day, rebuilt at 1.0.15: never pushed or installed): a seek made while paused was taken
+  for the resume (now only a re-stream within `RESUME_SLACK` 3s of the pause position is); the restart title
+  check applied to every service (now only `Sources::sharesUrl`, i.e. isRepeatingStream); an RP skip while paused
+  (RP refuses pause, probably unreachable) is covered by the first. `t_tracker` 123 → 128, `t_load` 47; totals 386.
+- Second review (same day): a seek THEN a pause and resume credited the whole resume point; the mark now keeps
+  `base` (where its current stream began) and a resume credits only `startOffset - base`.
+- Full check (same day, the whole Tracker state machine walked against the LMS 9.1 source): a same-url newsong
+  was dropped as a station title change even when it had a length, so RP's first song taken for a station
+  silenced every later one (older than 1.0.15). The station early-returns now apply only while the newsong
+  itself has no length. `t_tracker` 128 → 134; totals 392. 4 red on `23bace0`.
+- Third review (same day): no findings; clearances logged in the ledger §C.
+- Zip sha `54b0ccb471fa49a96987c69a5b097556b4e6d59b` (earlier builds `de3bf3ec…`, `cfdcde49…`, all 1.0.15, none pushed or installed). CHANGELOG /
+  README wait for the merge to `main`.
+
+## 1.0.16 — 2026-09-24 (dev, built: zip 34d9c573…, installed + VERIFIED LIVE) — library albums found again after a rescan
+
+Asked for by Simon 2026-09-24, from comparing Material's Recently Played: "follow what LMS does".
+
+- `Sources::describe` records three lasting keys beside `ref.album_id`: `album_mbid`
+  (`albums.musicbrainz_id`), `track_mbid` (the recording MBID), and `album_url` (LMS's
+  `Album::url`).
+- New `Sources::libraryAlbum($e, $capture)`. When the row id is gone, it tries in order: the album
+  MBID (for a release split into one album per disc, the disc that was played), the played files
+  (which must all agree), the track MBID (only if it names ONE album), then LMS's album url (for
+  entries recorded before the keys existed, rebuilt from an album entry's album and artist). A find
+  is written back with the new `DB::relinkLibrary` (compare-and-set, never during a scan, `plays`
+  untouched). With `$capture`, an entry whose id is still valid stores the keys it lacks.
+- `resolveTracks` (captures) and `releaseType` (never captures) go through it.
+  `_libraryReleaseType` now takes an Album object.
+- No schema change: `user_version` stays 1.
+- Tests: the relink blocks in `t_browse.pl` and `t_db.pl`, and "keys" in `t_tracker.pl`. The stubs
+  gain `objectForUrl`, the MBID searches and `Import::stillScanning`. 12 mutations, each red.
+- Residuals:
+  - An old single-track entry never captures the keys (its row plays the file directly), so after
+    a MOVE its release type is not recovered.
+  - Step 5 is LMS's own guess by name.
+- VERIFIED LIVE the same day: a retag ("At Sea (Single)" → "bollocks", new album 46646) relinked the
+  entry by its played files, and after a full clear and rescan all 11 library album entries still
+  opened their whole album under the new ids. The row kept its old name, which led to 1.0.17.
+
+## 1.0.17 — 2026-09-24 (dev, built: zip 00fab66e…, installed + VERIFIED LIVE) — history follows the library
+
+Asked for by Simon after the live retag test on 1.0.16. The entry was relinked correctly, but its row
+kept the old name.
+
+- `Sources::_nameChanges`: an album entry takes the album's title, album artist and year; a track
+  entry takes the album and year, plus its own track's title and artist. `plays` is never touched.
+- `libraryAlbum($e, $mode)`: a relink carries the names in every mode. Mode `open` or `sweep`
+  also renames a live album and captures the lasting keys. A list render (no mode) still only
+  reads a live album. In list context it returns `($alb, 'relinked' | 'renamed' | '')`.
+- New sweep: `startSweep` / `stopSweep` / `sweepTick` in Sources, and `DB::libraryAfter` (an id
+  cursor). `Plugin` runs it on `['rescan','done']` and 120s after startup, and stops it at
+  shutdown. 25 entries per tick, 1s apart; it waits while a scan runs; one summary log line at the
+  end.
+- `DB::relinkLibrary` also writes album / artist / title / year when given.
+- Closes the 1.0.16 residual: old single-track entries now capture the keys in the sweep.
+- Tests: `t_browse.pl` "names:", "sweep:" and "plugin:" (483 assertions in total); 12 mutations,
+  each red.
+- VERIFIED LIVE 2026-09-24 (server up 11:54:10): opening one "At Sea (Single)" row renamed it to
+  "Bollocks" at once. At +120s the sweep logged `library check done — 12 entries, 1 found their album
+  again, 0 renamed` and fixed the other row, including its cover. A rename made during a relink is
+  counted as "found", not "renamed" (commented at `%SWEEP`, no code change). Until the sweep reaches
+  an unopened stale row, it shows the old name and LMS's placeholder cover.
+
+## 1.0.18 — 2026-09-24 (dev, built: zip 1092d2c7…, not installed) — By release no longer searches
+
+From the /code-review of 1.0.16–1.0.17 (ledger §C, review round 2026-09-24).
+
+- `Sources::releaseType` no longer calls `libraryAlbum`. By release reads each library release's
+  row id alone (`find`), as before 1.0.16. Searching there ran several queries per stale release on
+  every By release view (the top list and each type's list), all through a rescan, and for good for
+  an album gone from the library. A stale release reads as ALBUM until the sweep (sent on every scan
+  end, measured in the LMS source) or an open finds it again. Ledger `A LIST RENDER DOES NOT SEARCH`.
+- `libraryAlbum` with no mode has no plugin caller now; its comment says so.
+- `DB.pm`: `plays`' comment moved back above `plays`; `libraryAfter`'s names `Sources::sweepTick`.
+- Tests: `t_browse.pl` "CONTROL relink: a list render does not search" (0 lookups) and "and writes
+  nothing", both RED with the 1.0.16 line put back. 485 assertions.
+- Zip sha `1092d2c7cec6dae722be7f6b26d38a500b6aa6f9`. CHANGELOG / README wait for the merge to `main`.

@@ -6,6 +6,9 @@ package Plugins::ListeningHistory::Sources;
 #                   artwork, the album key that groups back-to-back tracks, and the reference
 #                   that plays it again.
 #   resolveTracks() a stored album entry back into playable tracks.
+#   libraryAlbum()  a library entry's album found again after a rescan, retag or move, its names
+#                   following the library's; sweepTick() runs every library entry through it
+#                   after each rescan.
 #
 # The per-service replay code is COPIED from Listen Later's Sources.pm, not shared: a
 # sibling plugin cannot be `use`d (its package only resolves where it is installed), and a
@@ -17,6 +20,7 @@ use warnings;
 
 use Slim::Utils::Log;
 use Slim::Utils::Strings qw(cstring);
+use Slim::Utils::Timers;
 
 my $log = logger('plugin.listeninghistory');
 
@@ -123,6 +127,30 @@ sub _str {
 
 sub _first { for (@_) { my $s = _str($_); return $s if defined $s } return undef }
 
+# Does this url play song after song on ONE url? LMS's own test: the handler's isRepeatingStream
+# (Radio Paradise). There the url does not identify a song, the title does.
+sub sharesUrl {
+    my ($url, $song) = @_;
+    my $handler = eval { Slim::Player::ProtocolHandlers->handlerForURL($url) } or return 0;
+    return 0 unless $handler->can('isRepeatingStream');
+    return eval { $handler->isRepeatingStream($song) } ? 1 : 0;
+}
+
+# The playing track's length in seconds, 0 if unknown. For a REMOTE track the protocol handler's
+# figure comes first: it describes the song playing now, where the song's own can be missing (a
+# queued streaming track the service has not described yet) or stale (Radio Paradise plays every
+# song as a clone on one url; the clone keeps no length of its own and reads the shared track's,
+# which RP's getMetadataFor only updates when asked, so at newsong it is the PREVIOUS song's).
+# $meta, the handler's metadata, when the caller already has it.
+sub trackDuration {
+    my ($client, $song, $url, $remote, $meta) = @_;
+    if ($remote) {
+        my $m = ($meta || playingMeta($client, $url))->{duration};
+        return $m + 0 if defined $m && !ref $m && $m =~ /^[\d.]+$/ && $m > 0;
+    }
+    return eval { $song->duration } || 0;
+}
+
 # The artist a group of tracks is keyed on. Services credit every artist on a track
 # ("Kygo, Khalid, Gryffin" from Spotty), so two tracks of one album can carry different
 # full credits; their FIRST credit agrees.
@@ -161,7 +189,8 @@ sub isStation {
 # track is not something we record.
 #
 #   source, remote, url, title, artist, album, year, artwork, duration,
-#   is_station, track_total, ref (album_id | svc_album_id, svc), album_key
+#   is_station, track_total, album_key, ref (album_id + album_mbid, track_mbid, album_url for
+#   libraryAlbum | svc_album_id, svc, release_type)
 sub describe {
     my ($client, $song, $track, $url) = @_;
     return (undef, 'no url') unless defined $url && length $url;
@@ -186,6 +215,8 @@ sub describe {
             $d{year} = $y if $y && $y =~ /^\d{4}$/;
             if (my $aid = eval { $alb->id }) {
                 $d{ref}{album_id} = $aid;
+                # The keys that outlive the row id (libraryAlbum): a rescan renumbers the album.
+                %{ $d{ref} } = (%{ $d{ref} }, _albumKeys($alb, $track));
                 $d{track_total} = eval {
                     Slim::Schema->search('Track', { 'album.id' => $aid }, { join => 'album' })->count;
                 } || undef;
@@ -214,15 +245,14 @@ sub describe {
         my $y = $meta->{year};
         $d{year}    = $y if defined $y && !ref $y && $y =~ /^\d{4}$/;
         $d{artwork} = _first(@{$meta}{qw(cover image icon artwork_url)});
-        my $mdur    = $meta->{duration};
-        $d{duration} = $duration > 0 ? $duration
-                     : (defined $mdur && !ref $mdur && $mdur =~ /^[\d.]+$/ ? $mdur : 0);
+        $d{duration} = trackDuration($client, $song, $url, 1, $meta);
 
         $d{is_station} = isStation($source, $d{duration}, 1);
 
         if ($d{is_station}) {
-            # A station row is named after the STATION, which is what the track title holds
-            # for a stream (the menu title); the handler's title is the now-playing song.
+            # A station is named after the STATION, which is what the track title holds for a
+            # stream (the menu title); the handler's title is the now-playing song. Stations are
+            # not recorded since 1.0.15: the name is for Tracker's log line and old station rows.
             $d{title}  = _first(eval { $track->title }, $meta->{title}, $url);
             $d{artist} = undef;
             $d{album}  = undef;
@@ -344,6 +374,263 @@ sub _libraryTracks {
     return \@items;
 }
 
+# ---------------------------------------------------------------------------
+# A library entry's album, found again after a rescan. `ref.album_id` is LMS's albums.id, a row
+# number: "Clear library and rescan" (schema_clear.sql DELETEs the table; the id is AUTOINCREMENT,
+# so an old number is never reused) and a retag of the album's title or artist both leave it
+# pointing at NOTHING, never at another album. So the album is looked for the way LMS itself
+# keeps things across a rescan, most exact key first (Simon, 2026-09-24: "follow what LMS does"):
+#
+#   1. the row id, while it still exists
+#   2. the album's MusicBrainz release id (albums.musicbrainz_id) — how the scanner itself tells
+#      one tagged album from another (_createOrUpdateAlbum)
+#   3. the files that were played — persist.db's urlmd5; a wipe and a retag keep the path
+#   4. the track's MusicBrainz id — persist.db's FIRST key, but here only when it names ONE album:
+#      it is the RECORDING id (MUSICBRAINZ_TRACKID / UFID), which repeats on every compilation
+#      the song is on. After the urls for that reason: a url that resolves is exact.
+#   5. LMS's own album url, `Album::url` (extid, else db:album.title=…&contributor.name=…), which
+#      is how an LMS favourite finds its album again — by name, the first match. Only once every
+#      exact key has failed: it is what recovers an untagged album whose files were moved.
+#
+# A find by 2–5 is written back (relinkLibrary), so the next read is step 1 again. Never while a
+# scan runs: the library is half-built (persist.db skips its writes then too, LMS bug 16003).
+# ---------------------------------------------------------------------------
+
+my $UUID = qr/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+sub _mbid {
+    my ($v) = @_;
+    return (defined $v && !ref $v && $v =~ $UUID) ? $v : undef;
+}
+
+# The lasting keys of a library album, and of the track played from it when there is one.
+sub _albumKeys {
+    my ($alb, $track) = @_;
+    my %k;
+    my $url = eval { $alb->url };
+    $k{album_url}  = $url if defined $url && !ref $url && length $url;
+    my $am = _mbid(eval { $alb->musicbrainz_id });
+    $k{album_mbid} = $am if $am;
+    my $tm = $track ? _mbid(eval { $track->musicbrainz_id }) : undef;
+    $k{track_mbid} = $tm if $tm;
+    return %k;
+}
+
+sub _scanning { return eval { Slim::Music::Import->stillScanning } ? 1 : 0 }
+
+# The urls an entry played: a track entry's own, an album entry's plays.
+sub _entryUrls {
+    my ($e) = @_;
+    my %seen;
+    my @urls = grep { defined && length && !$seen{$_}++ }
+        ($e->{url}, map { $_->{url} } @{ Plugins::ListeningHistory::DB->can('plays')->($e->{id}) || [] });
+    return @urls;
+}
+
+sub _trackForUrl {
+    my ($url) = @_;
+    my $t = eval { Slim::Schema->objectForUrl({ url => $url, create => 0 }) };
+    return (ref $t && eval { $t->can('album') }) ? $t : undef;
+}
+
+# The one album every item maps to, or undef when they disagree or none maps.
+sub _sameAlbum {
+    my %by;
+    for my $alb (@_) {
+        my $id = ref $alb ? eval { $alb->id } : undef;
+        $by{$id} //= $alb if defined $id;
+    }
+    return keys %by == 1 ? (values %by)[0] : undef;
+}
+
+sub _byAlbumMbid {
+    my ($ref, $urls) = @_;
+    my $mbid = _mbid($ref->{album_mbid}) or return undef;
+    my @albums = eval { Slim::Schema->search('Album', { musicbrainz_id => $mbid })->all };
+    return $albums[0] if @albums == 1;
+    return undef unless @albums;
+    # One release split into several albums (a disc per album): the one this entry played.
+    my %ours = map { my $al = eval { $_->album }; $al ? (eval { $al->id } => 1) : () }
+               grep { defined } map { _trackForUrl($_) } @$urls;
+    my @hit = grep { $ours{ eval { $_->id } // '' } } @albums;
+    return @hit == 1 ? $hit[0] : undef;
+}
+
+sub _byUrls {
+    my ($urls) = @_;
+    return _sameAlbum(map { my $t = _trackForUrl($_); $t ? eval { $t->album } : () } @$urls);
+}
+
+sub _byTrackMbid {
+    my ($ref) = @_;
+    my $mbid = _mbid($ref->{track_mbid}) or return undef;
+    my @tracks = eval { Slim::Schema->search('Track', { musicbrainz_id => $mbid })->all };
+    return _sameAlbum(map { eval { $_->album } || () } @tracks);
+}
+
+sub _byAlbumUrl {
+    my ($e) = @_;
+    my $ref = $e->{ref} || {};
+    my $url = $ref->{album_url};
+    # Stored before the keys were: an ALBUM entry's artist is the album artist (the promotion
+    # stores album_artist), so LMS's url can be rebuilt; a track entry's artist is the track's.
+    # Built from the stored names, which describe() trimmed (_str): an album whose title starts or
+    # ends in whitespace is not found this way.
+    if (!defined $url && ($e->{kind} // '') eq 'album'
+        && defined $e->{album} && length $e->{album} && defined $e->{artist} && length $e->{artist})
+    {
+        require URI::Escape;
+        $url = sprintf('db:album.title=%s&contributor.name=%s',
+            URI::Escape::uri_escape_utf8($e->{album}), URI::Escape::uri_escape_utf8($e->{artist}));
+    }
+    return undef unless defined $url && $url =~ /^db:album\./;
+    my $alb = eval { Slim::Schema->objectForUrl({ url => $url, create => 0 }) };
+    return (ref $alb && eval { $alb->id }) ? $alb : undef;
+}
+
+# The names an entry should carry for $alb, where they differ from what it carries now (Simon,
+# 2026-09-24: history follows the library — a retag renames the row, so it groups and searches
+# with the plays that come after it). An ALBUM entry: title, album artist (the name the promotion
+# stores) and year. A TRACK entry: album and year, and its own track's title and artist when its
+# file is still on this album. Trimmed as describe() trims (_str), so a name never differs by
+# whitespace alone. The play log (plays) keeps what was heard.
+sub _nameChanges {
+    my ($e, $alb) = @_;
+    my %n;
+    my $set = sub { my ($k, $v) = @_; $n{$k} = $v if defined $v && ($e->{$k} // '') ne $v };
+    $set->(album => _str(eval { $alb->title }));
+    my $y = eval { $alb->year };
+    $set->(year => $y) if defined $y && $y =~ /^\d{4}$/;
+    if (($e->{kind} // '') eq 'album') {
+        $set->(artist => _str(eval { $alb->contributor ? $alb->contributor->name : undef }));
+    }
+    elsif (my $t = _trackForUrl($e->{url})) {
+        my $ta = eval { $t->album };
+        if ($ta && (eval { $ta->id } // '') eq (eval { $alb->id } // '-')) {
+            $set->(title  => _str(eval { $t->title }));
+            $set->(artist => _first(eval { $t->artistName },
+                                    eval { $alb->contributor ? $alb->contributor->name : undef }));
+        }
+    }
+    return %n;
+}
+
+# The live LMS album of a library entry, or undef (in list context also what was written:
+# 'relinked', 'renamed' or ''). $mode:
+#   undef    find a stale album again and write it back, names included; an entry whose album is
+#            still there is only read. No plugin caller uses it (a list render, releaseType, reads
+#            the row id alone); the suites drive the search through it.
+#   'open'   one entry being opened (resolveTracks), and
+#   'sweep'  the pass after a rescan (sweepTick): also store the lasting keys an entry recorded
+#            before them lacks, and bring its names in line with the library's.
+sub libraryAlbum {
+    my ($e, $mode) = @_;
+    my $out = sub { return wantarray ? @_ : $_[0] };
+    return $out->(undef, '') unless ref $e eq 'HASH' && ($e->{source} // '') eq 'library';
+    my $ref = ref $e->{ref} eq 'HASH' ? $e->{ref} : {};
+    my $old = $ref->{album_id} or return $out->(undef, '');
+
+    if (my $alb = eval { Slim::Schema->find('Album', $old) }) {
+        return $out->($alb, '') unless $mode && !_scanning();
+        my %w;
+        if (!defined $ref->{album_url}) {
+            my $t;
+            for (_entryUrls($e)) { last if $t = _trackForUrl($_) }
+            %w = _albumKeys($alb, $t);
+        }
+        my %n = _nameChanges($e, $alb);
+        return $out->($alb, '') unless %w || %n;
+        return $out->($alb, '') unless Plugins::ListeningHistory::DB::relinkLibrary($e->{id}, $old, { album_id => $old, %w, %n });
+        %$ref = (%$ref, %w);
+        @{$e}{ keys %n } = values %n;
+        return $out->($alb, %n ? 'renamed' : '');
+    }
+
+    my @urls = _entryUrls($e);
+    my ($alb, $how);
+    ($alb = _byAlbumMbid($ref, \@urls)) and $how = 'album MusicBrainz id';
+    $alb or (($alb = _byUrls(\@urls))   and $how = 'played files');
+    $alb or (($alb = _byTrackMbid($ref)) and $how = 'track MusicBrainz id');
+    $alb or (($alb = _byAlbumUrl($e))   and $how = 'album name');
+    return $out->(undef, '') unless $alb;
+
+    my $new = eval { $alb->id } or return $out->(undef, '');
+    my $art = eval { $alb->artwork };
+    my %n   = _nameChanges($e, $alb);
+    my %new = (album_id => $new, _albumKeys($alb, undef), %n,
+               (_mbid($ref->{track_mbid}) ? (track_mbid => $ref->{track_mbid}) : ()),
+               ($art && $art !~ /^-/ ? (artwork => "/music/$art/cover") : ()));
+    if (_scanning()) {
+        $log->info("Listening History: entry $e->{id} album $old is now $new (by $how); not stored during a scan");
+        return $out->($alb, '');
+    }
+    return $out->($alb, '') unless Plugins::ListeningHistory::DB::relinkLibrary($e->{id}, $old, \%new);
+    $log->info("Listening History: entry $e->{id} album $old is now $new (found by $how)");
+    $e->{artwork}   = delete $new{artwork} if defined $new{artwork};
+    $e->{album_key} = "lib:$new" if ($e->{album_key} // '') eq "lib:$old";
+    @{$e}{ keys %n } = values %n;
+    delete @new{ keys %n };
+    %$ref = (%$ref, %new);
+    $e->{ref} = $ref;
+    return $out->($alb, 'relinked');
+}
+
+# ---------------------------------------------------------------------------
+# The sweep after a rescan. A rescan is when albums are renumbered and renamed, so when LMS says
+# one has finished (['rescan', 'done'], Slim::Music::Import) every library entry is run through
+# libraryAlbum('sweep'): a stale album is found again, the names follow the library, and an entry
+# recorded before the lasting keys gains them. Also once after startup, for a scan that finished
+# while the plugin was not running. SWEEP_BATCH entries per tick, SWEEP_GAP seconds apart, so the
+# server never stalls; while a scan runs it waits and carries on from where it was.
+# ---------------------------------------------------------------------------
+use constant SWEEP_BATCH => 25;
+use constant SWEEP_GAP   => 1;
+use constant SWEEP_WAIT  => 30;
+
+my %SWEEP;   # { after => last entry id done, seen, relinked, renamed } while a sweep is under way;
+             # a relink that also renamed counts once, as relinked
+
+sub startSweep {
+    my ($delay) = @_;
+    Slim::Utils::Timers::killTimers(undef, \&sweepTick);
+    %SWEEP = (after => 0, seen => 0, relinked => 0, renamed => 0);
+    Slim::Utils::Timers::setTimer(undef, time() + ($delay // 10), \&sweepTick);
+    return;
+}
+
+sub stopSweep {
+    Slim::Utils::Timers::killTimers(undef, \&sweepTick);
+    %SWEEP = ();
+    return;
+}
+
+# Timer body. A named sub, so killTimers can pair on the coderef.
+sub sweepTick {
+    return unless %SWEEP;
+    if (_scanning()) {
+        Slim::Utils::Timers::setTimer(undef, time() + SWEEP_WAIT, \&sweepTick);
+        return;
+    }
+    my $rows = Plugins::ListeningHistory::DB::libraryAfter($SWEEP{after}, SWEEP_BATCH);
+    unless (@$rows) {
+        my $msg = "Listening History: library check done — $SWEEP{seen} entries, $SWEEP{relinked} "
+                . "found their album again, $SWEEP{renamed} renamed to follow the library";
+        ($SWEEP{relinked} || $SWEEP{renamed}) ? $log->warn($msg) : $log->info($msg);
+        %SWEEP = ();
+        return;
+    }
+    for my $e (@$rows) {
+        $SWEEP{after} = $e->{id};
+        $SWEEP{seen}++;
+        my (undef, $what) = eval { libraryAlbum($e, 'sweep') };
+        $log->error("Listening History: checking entry $e->{id} failed: $@") if $@;
+        $SWEEP{relinked}++ if ($what // '') eq 'relinked';
+        $SWEEP{renamed}++  if ($what // '') eq 'renamed';
+    }
+    Slim::Utils::Timers::setTimer(undef, time() + SWEEP_GAP, \&sweepTick);
+    return;
+}
+
 # A stored ALBUM entry as playable tracks: the whole album when its library or service can
 # rebuild it, otherwise the tracks that were played. $cb->(\@items).
 sub resolveTracks {
@@ -351,7 +638,8 @@ sub resolveTracks {
     my $ref = $entry->{ref} || {};
 
     if ($entry->{source} eq 'library' && $ref->{album_id}) {
-        my $items = _libraryTracks($ref->{album_id});
+        my $alb   = libraryAlbum($entry, 'open');
+        my $items = $alb ? _libraryTracks(eval { $alb->id }) : [];
         return $cb->(@$items ? $items : playedTracks($entry));
     }
 
@@ -386,7 +674,12 @@ sub resolveTracks {
 # ---------------------------------------------------------------------------
 
 # The type of a stored entry's release. The LIBRARY is read live from LMS, so every entry
-# already in the history has one and a retag + rescan moves it. QOBUZ is what fetchReleaseType
+# already in the history has one and a retag + rescan moves it. This is a list render (By release
+# asks it of every release), so it reads the row id and nothing more: an album a rescan renumbered
+# is found again by the sweep after that rescan, or by opening the entry (libraryAlbum), and until
+# then its release reads as the stored type or ALBUM. Searching here cost a handful of queries per
+# stale release on every By release view, all through a rescan (nothing is stored while it runs)
+# and forever for an album that has left the library. QOBUZ is what fetchReleaseType
 # stored when it played. Nothing else states a type (Tidal, Deezer and Spotify only through
 # their plugins' internals — declined fleet-wide, see the streaming-service-apis note), so
 # everything else is ALBUM, which is also what Material assumes for a release with no type.
@@ -395,7 +688,7 @@ sub releaseType {
     return 'ALBUM' unless ref $e eq 'HASH';
     my $ref = ref $e->{ref} eq 'HASH' ? $e->{ref} : {};
     if (($e->{source} // '') eq 'library' && $ref->{album_id}) {
-        my $t = _libraryReleaseType($ref->{album_id});
+        my $t = _libraryReleaseType(scalar eval { Slim::Schema->find('Album', $ref->{album_id}) });
         return $t if $t;
     }
     return _normType($ref->{release_type}) || 'ALBUM';
@@ -418,8 +711,8 @@ sub _normType {
 # LMS 8.4+ `albums.release_type`. Material's rule (browse-resp.js): a compilation whose type is
 # ALBUM, or has none, groups as COMPILATION.
 sub _libraryReleaseType {
-    my ($id) = @_;
-    my $alb = eval { Slim::Schema->find('Album', $id) } or return undef;
+    my ($alb) = @_;
+    return undef unless $alb;
     my $t = _normType(eval { $alb->release_type });
     return 'COMPILATION' if eval { $alb->compilation } && (!$t || $t eq 'ALBUM');
     return $t;

@@ -13,7 +13,7 @@ require "$FindBin::Bin/t_stubs.pl";
 main::lh_require(qw(DB Sources Tracker));
 main::lh_tempdb();
 Slim::Utils::Prefs::set_test_pref('plugin.listeninghistory', $_->[0], $_->[1])
-    for [played_threshold => 90], [session_gap_min => 30], [record_radio => 1];
+    for [played_threshold => 90], [session_gap_min => 30];
 
 Plugins::ListeningHistory::Tracker->init();
 my ($CB) = map { $_->[0] } @Slim::Control::Request::SUBSCRIBED;
@@ -26,11 +26,13 @@ ok('the tracker subscribes to playlist events', ref $CB eq 'CODE');
 # started inside the track (a resume, a seek) is the song's startOffset.
 { package FakeSong;    sub duration { $_[0]{duration} } sub track { $_[0]{track} } sub startOffset { $_[0]{startOffset} } }
 { package FakeTrack;   sub url { $_[0]{url} } sub title { $_[0]{title} } sub artistName { $_[0]{artist} }
-  sub album { $_[0]{album} } sub albumname { $_[0]{albumname} } sub remote { $_[0]{remote} } }
+  sub album { $_[0]{album} } sub albumname { $_[0]{albumname} } sub remote { $_[0]{remote} }
+  sub musicbrainz_id { $_[0]{mbid} } }
 { package FakeAlbum;   sub id { $_[0]{id} } sub title { $_[0]{title} } sub year { $_[0]{year} }
-  sub artwork { $_[0]{artwork} } sub contributor { my $n = $_[0]{artist}; bless { n => $n }, 'FakeContrib' } }
+  sub artwork { $_[0]{artwork} } sub contributor { my $n = $_[0]{artist}; bless { n => $n }, 'FakeContrib' }
+  sub musicbrainz_id { $_[0]{mbid} } sub url { "db:album.title=$_[0]{title}&contributor.name=$_[0]{artist}" } }
 { package FakeContrib; sub name { $_[0]{n} } }
-{ package FakeRequest; sub client { $_[0]{client} }
+{ package FakeRequest; sub client { $_[0]{client} } sub getParam { $_[0]{params}{ $_[1] } }
   sub isCommand { my ($s, $spec) = @_; return scalar grep { $_ eq $s->{cmd} } @{ $spec->[1] } } }
 
 my %ALB;
@@ -47,7 +49,10 @@ sub libTrack {
 }
 sub remoteTrack { my (%t) = @_; return bless { remote => 1, %t }, 'FakeTrack' }
 
-sub event { my ($client, $cmd) = @_; $CB->(bless { client => $client, cmd => $cmd }, 'FakeRequest') }
+sub event { my ($client, $cmd, %p) = @_; $CB->(bless { client => $client, cmd => $cmd, params => \%p }, 'FakeRequest') }
+# LMS's ['playlist', 'pause', 1|0]: the parameter is '_newvalue' (Request.pm dispatch table, 9.1).
+sub pause  { event($_[0], 'pause', _newvalue => 1) }
+sub resume { event($_[0], 'pause', _newvalue => 0) }
 
 # Start a track. With listen => 1 (the default) it then plays past the threshold and the
 # pending timer fires; with listen => 0 it is left pending.
@@ -99,6 +104,44 @@ is('album: knows the album length from the library', $e->[0]{track_total}, 12);
 is('album: the track title is cleared', $e->[0]{title}, undef);
 is('album: replays by library album id', $e->[0]{ref}{album_id}, 10);
 is('album: all three plays are logged', scalar @{ Plugins::ListeningHistory::DB::plays($e->[0]{id}) }, 3);
+
+# --- the lasting keys: a rescan renumbers the album, so its MBIDs and LMS url go with it ---
+fresh();
+{
+    my $M1 = '11111111-1111-1111-1111-111111111111';
+    local $ALB{10}{mbid} = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    my ($t1, $t2) = (libTrack(10, 1), libTrack(10, 2));
+    $t1->{mbid} = $M1;
+    $t2->{mbid} = '22222222-2222-2222-2222-222222222222';
+    play($kitchen, $t1);
+    $e = entries();
+    is('keys: a tagged track stores the album MBID', $e->[0]{ref}{album_mbid}, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    is('keys: and the track (recording) MBID', $e->[0]{ref}{track_mbid}, $M1);
+    is('keys: and LMS\'s own album url', $e->[0]{ref}{album_url}, 'db:album.title=Blue Album&contributor.name=Band A');
+    play($kitchen, $t2);
+    $e = entries();
+    is('keys: promotion keeps the album MBID', $e->[0]{ref}{album_mbid}, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa');
+    is('keys: promotion keeps an album url', $e->[0]{ref}{album_url}, 'db:album.title=Blue Album&contributor.name=Band A');
+    is('keys: promotion keeps the row id', $e->[0]{ref}{album_id}, 10);
+}
+fresh();
+{
+    my $t = libTrack(20, 1);
+    $t->{mbid} = 'not-a-uuid';
+    play($kitchen, $t);
+    $e = entries();
+    ok('keys: an untagged album stores no album MBID', !exists $e->[0]{ref}{album_mbid});
+    ok('keys: a malformed track MBID is not stored', !exists $e->[0]{ref}{track_mbid});
+    is('keys: an untagged album still stores its url', $e->[0]{ref}{album_url}, 'db:album.title=Red Album&contributor.name=Band B');
+}
+
+# --- shuffle: an album in random order groups exactly as in track order (Simon, 2026-09-23) ---
+fresh();
+play($kitchen, libTrack(10, $_)) for 7, 2, 11, 5, 1;
+$e = entries();
+is('shuffle: ONE entry', scalar @$e, 1);
+is('shuffle: an ALBUM entry', $e->[0]{kind}, 'album');
+is('shuffle: every track heard, in the order heard', join(',', map { m{/(\d+)\.flac$} ? $1 : $_ } map { $_->{url} } @{ Plugins::ListeningHistory::DB::plays($e->[0]{id}) }), '7,2,11,5,1');
 
 # --- A, B, then A again -------------------------------------------------------------------
 fresh();
@@ -291,7 +334,7 @@ $Slim::Player::ProtocolHandlers::META{spotify} = { title => 'Real Song', artist 
 play($kitchen, remoteTrack(url => 'spotify://track:y'), duration => 180);
 is('spotify control: a real track IS recorded', scalar @{ entries() }, 1);
 
-# --- radio: one station entry per session --------------------------------------------------
+# --- radio: a station is NOT recorded (Simon, 2026-09-23), and it is timed once ------------
 fresh();
 $Slim::Player::ProtocolHandlers::META{http} = { title => 'Now: Some Song' };
 my $station = remoteTrack(url => 'http://stream.example/radio', title => 'Radio Example');
@@ -301,19 +344,15 @@ for (1 .. 3) { TestClock::advance(20); event($kitchen, q(newsong)) }   # stream 
 is(q(radio: title changes do not push the mark back), $Slim::Utils::Timers::ARMED[0]{when}, $deadline);
 is('radio: title changes keep ONE pending mark', scalar @Slim::Utils::Timers::ARMED, 1);
 Slim::Utils::Timers::fire_timer($kitchen);
-event($kitchen, 'newsong');                       # another title change after it is logged
-Slim::Utils::Timers::fire_timer($kitchen);
-$e = entries();
-is('radio: one entry', scalar @$e, 1);
-is('radio: a station entry', $e->[0]{kind}, 'station');
-is('radio: named after the station, not the song', $e->[0]{title}, 'Radio Example');
-is('radio: plays the station url', $e->[0]{url}, 'http://stream.example/radio');
-
+is('radio: the station is not recorded', scalar @{ entries() }, 0);
+event($kitchen, 'newsong');                       # another title change after it was timed
+is('radio: a later title change is not timed again', scalar @Slim::Utils::Timers::ARMED, 0);
+# A station ends the album session like anything else: the album does not carry on through it.
 fresh();
-Slim::Utils::Prefs::set_test_pref('plugin.listeninghistory', record_radio => 0);
+play($kitchen, libTrack(10, 1));
 play($kitchen, $station, duration => 0);
-is('radio off: nothing recorded', scalar @{ entries() }, 0);
-Slim::Utils::Prefs::set_test_pref('plugin.listeninghistory', record_radio => 1);
+play($kitchen, libTrack(10, 2));
+is('radio between two tracks: two track entries, no album', join(',', map { $_->{kind} } @{ entries() }), 'track,track');
 
 # --- a remote track whose length is not known at the start is NOT timed as radio ----------
 # Song duration 0 at newsong, but the handler knows the length: the 90% rule applies.
@@ -490,6 +529,286 @@ play($kitchen, $station, duration => 0);
 restart();
 play($kitchen, $station, duration => 0);
 Slim::Utils::Timers::fire_timer($kitchen);
-is('restart on radio: the station is not logged again', scalar @{ entries() }, 1);
+is('restart on radio: nothing logged', scalar @{ entries() }, 0);
+
+# --- a pause stops the session clock (1.0.15) ------------------------------------------------
+# A STREAMING track paused long enough for the player's buffer to fill is resumed by LMS as a new
+# stream from the pause point (StreamingController _CheckPaused, _JumpOrResume -> _JumpToTime):
+# a newsong on the SAME url with startOffset set, songElapsedSeconds from 0, and NO pause-0 event.
+# Found live: Gia Margaret "Singing" logged as two album entries, the paused track in neither.
+$Slim::Player::ProtocolHandlers::META{qobuz} = { map {
+    ("qobuz://p$_.flac" => { title => "P$_", artist => 'P Band', album => 'P Album', albumId => 'qp1', duration => 200 })
+} 1 .. 5 };
+sub qp { remoteTrack(url => "qobuz://p$_[0].flac", title => "P$_[0]") }
+sub pqUrls { join ',', map { $_->{url} =~ m{p(\d+)\.flac$} ? $1 : $_->{url} } @{ Plugins::ListeningHistory::DB::plays($_[0]) } }
+
+fresh();
+play($kitchen, qp(1));
+play($kitchen, qp(2));
+play($kitchen, qp(3), listen => 0);
+$kitchen->{elapsed} = 100;
+pause($kitchen);
+TestClock::advance(45 * 60);
+$kitchen->{song}{startOffset} = 100;              # LMS re-streams from the pause point
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('streaming resume: only the rest of the 90% is owed (80s)', $due <= 80);
+$kitchen->{elapsed} = 95;                         # plays out the rest of track 3
+Slim::Utils::Timers::fire_timer($kitchen);
+play($kitchen, qp(4));
+play($kitchen, qp(5));
+$e = entries();
+is('streaming resume after a 45 min pause: ONE entry', scalar @$e, 1);
+is('streaming resume: the paused track is counted, once', pqUrls($e->[0]{id}), '1,2,3,4,5');
+
+# Paused AFTER the track counted, then re-streamed: still that one play, nothing new is timed.
+fresh();
+play($kitchen, qp(1));
+play($kitchen, qp(2));                             # counted at 95%
+pause($kitchen);
+TestClock::advance(45 * 60);
+$kitchen->{song}{startOffset} = 190;
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+is('streaming resume after the count: nothing timed again', scalar @Slim::Utils::Timers::ARMED, 0);
+play($kitchen, qp(3));
+$e = entries();
+is('streaming resume after the count: the album carries on', scalar @$e, 1);
+is('streaming resume after the count: three tracks, each once', pqUrls($e->[0]{id}), '1,2,3');
+
+# A LOCAL file resumes in place: pause 1, then pause 0, no newsong. Paused after track 2 counted,
+# for longer than the gap: the gap must not run through the pause.
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2));
+pause($kitchen);
+TestClock::advance(45 * 60);
+resume($kitchen);
+play($kitchen, libTrack(10, 3));
+$e = entries();
+is('local pause after the count: ONE entry', scalar @$e, 1);
+is('local pause after the count: three tracks', urlsOf($e->[0]{id}), '1,2,3');
+
+# Paused mid-track and resumed: the mark still waits for the playback, and the album holds.
+fresh();
+play($kitchen, libTrack(10, 1));
+play($kitchen, libTrack(10, 2), listen => 0);
+$kitchen->{elapsed} = 50;
+pause($kitchen);
+TestClock::advance(45 * 60);
+resume($kitchen);
+$kitchen->{elapsed} = 190;
+Slim::Utils::Timers::fire_timer($kitchen);
+play($kitchen, libTrack(10, 3));
+is('local pause mid-track: ONE entry of three', urlsOf(entries()->[0]{id}), '1,2,3');
+
+# Paused, then the player moves on to the next track itself (a skip while paused): the pause
+# still does not count towards the gap.
+fresh();
+play($kitchen, libTrack(10, 1));
+pause($kitchen);
+TestClock::advance(45 * 60);
+play($kitchen, libTrack(10, 2));
+is('pause then next track: joins the album', scalar @{ entries() }, 1);
+
+# CONTROL: the gap without a pause still splits.
+fresh();
+play($kitchen, libTrack(10, 1));
+TestClock::advance(45 * 60);
+play($kitchen, libTrack(10, 2));
+is('CONTROL no pause, 45 min gap: two entries', scalar @{ entries() }, 2);
+
+# CONTROL: a stop while paused still ends the session.
+fresh();
+play($kitchen, libTrack(10, 1));
+pause($kitchen);
+event($kitchen, 'stop');
+play($kitchen, libTrack(10, 2));
+is('CONTROL pause then stop: two entries', scalar @{ entries() }, 2);
+
+# CONTROL: a seek (a newsong on the same url with NO pause before it) still owes the whole 90%.
+fresh();
+play($kitchen, qp(1), listen => 0);
+$kitchen->{song}{startOffset} = 150;
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('CONTROL streaming seek: the mark is not shortened', $due > 100);
+
+# CONTROL: a newsong for ANOTHER track after a pause is a new track, fully owed.
+fresh();
+play($kitchen, qp(1), listen => 0);
+pause($kitchen);
+play($kitchen, qp(2), listen => 0);
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('CONTROL pause then another track: its full 90% is owed', $due > 170);
+
+# --- the length is read again at every check (1.0.15) --------------------------------------
+# A queued streaming track can start before its service knows the length. It was counted at the
+# 60s no-length fallback, a quarter of the way in, and never handed to the 90% rule. Found live:
+# a streaming album queued after a local one was logged before its first track had finished.
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = { 'qobuz://late.flac' =>
+    { title => 'Late', artist => 'L Band', album => 'L Album', albumId => 'ql1' } };
+play($kitchen, remoteTrack(url => 'qobuz://late.flac', title => 'Late'), duration => 0, listen => 0);
+$Slim::Player::ProtocolHandlers::META{qobuz}{'qobuz://late.flac'}{duration} = 240;   # the service learns it
+$kitchen->{elapsed} = 60;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('late length: not recorded at 60s of 240', scalar @{ entries() }, 0);
+$kitchen->{elapsed} = 220;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('late length: recorded once 90% is played', scalar @{ entries() }, 1);
+
+# No length at all yet at the first check: it waits for one, it is not counted.
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = { 'qobuz://none.flac' =>
+    { title => 'None', artist => 'N Band', album => 'N Album', albumId => 'qz1' } };
+play($kitchen, remoteTrack(url => 'qobuz://none.flac', title => 'None'), duration => 0, listen => 0);
+$kitchen->{elapsed} = 60;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('no length yet: not recorded at 60s', scalar @{ entries() }, 0);
+ok('no length yet: still timed', scalar @Slim::Utils::Timers::ARMED);
+
+# Radio Paradise plays every song on ONE url (isRepeatingStream). Each song is a clone with no
+# length of its own, so LMS's song length at newsong is the PREVIOUS song's; RP's handler has the
+# right one. A song shorter than 90% of the one before was never recorded.
+# RP's handler says so: isRepeatingStream (RP 3.6.6 ProtocolHandler).
+{ no warnings 'once'; *TestHandler::isRepeatingStream = sub { (eval { $_[1]->track->url } // '') =~ /^radioparadise:/ ? 1 : 0 }; }
+fresh();
+my $rpUrl = 'radioparadise://4.flac';
+sub rpSong {
+    my ($title, $len, $stale) = @_;
+    $Slim::Player::ProtocolHandlers::META{radioparadise} =
+        { title => $title, artist => "$title Artist", album => "$title Album", duration => $len };
+    $kitchen->{song}    = bless { duration => $stale, track => remoteTrack(url => $rpUrl, title => 'Radio Paradise') }, 'FakeSong';
+    $kitchen->{elapsed} = 0;
+    event($kitchen, 'newsong');
+}
+rpSong('Long', 322, 0);
+$kitchen->{elapsed} = 300;
+Slim::Utils::Timers::fire_timer($kitchen);
+rpSong('Short', 200, 322);                        # LMS still says 322
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('RP: the mark is timed from the song\'s own length (180s)', $due <= 180);
+$kitchen->{elapsed} = 185;
+Slim::Utils::Timers::fire_timer($kitchen);
+rpSong('Next', 250, 200);
+$kitchen->{elapsed} = 100;                        # an early check: 100s of 250 is not a listen
+Slim::Utils::Timers::fire_timer($kitchen) for 1;
+my @rp = map { $_->{title} } reverse @{ entries() };
+is('RP: each song heard is its own track entry', join(',', @rp), 'Long,Short');
+is('RP: recorded under its own service', entries()->[0]{source}, 'radioparadise');
+is('RP: with the song\'s own length', Plugins::ListeningHistory::DB::plays(entries()->[0]{id})->[0]{duration}, 200);
+
+# After a restart the first counted play is dropped only if it is the SAME song: on RP every song
+# shares the url, so the url alone would drop a new song.
+fresh();
+rpSong('Before', 200, 0);
+$kitchen->{elapsed} = 190;
+Slim::Utils::Timers::fire_timer($kitchen);
+restart();
+rpSong('After', 200, 200);
+$kitchen->{elapsed} = 190;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('RP restart: a different song after it IS recorded', join(',', map { $_->{title} } reverse @{ entries() }), 'Before,After');
+fresh();
+rpSong('Same', 200, 0);
+$kitchen->{elapsed} = 190;
+Slim::Utils::Timers::fire_timer($kitchen);
+restart();
+rpSong('Same', 200, 200);
+$kitchen->{elapsed} = 190;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('CONTROL RP restart: the same song resumed is not counted twice', scalar @{ entries() }, 1);
+
+# --- review of 1.0.15 (2026-09-23) -------------------------------------------------------------
+# A seek made WHILE PAUSED is also a new stream on the paused url, but not from the pause point:
+# it is a seek, and the whole 90% is still owed.
+fresh();
+play($kitchen, qp(1), listen => 0);
+$kitchen->{elapsed} = 10;
+pause($kitchen);
+$kitchen->{song}{startOffset} = 170;              # dragged to 170s of 200, then play
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('seek while paused: the mark is not shortened', $due > 100);
+$kitchen->{elapsed} = 25;                         # plays out the last 30s
+Slim::Utils::Timers::fire_timer($kitchen);
+is('seek while paused: 10s + the last 30s is not a listen', scalar @{ entries() }, 0);
+
+# Radio Paradise skipped while paused: the next song is a newsong on the SAME url, starting at 0.
+# It is a new song, not the rest of the one already counted.
+fresh();
+rpSong('A', 200, 0);
+$kitchen->{elapsed} = 190;
+Slim::Utils::Timers::fire_timer($kitchen);
+pause($kitchen);
+rpSong('B', 200, 200);                            # Next, pressed while paused
+ok('RP skip while paused: the next song is timed', scalar @Slim::Utils::Timers::ARMED);
+$kitchen->{elapsed} = 185;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('RP skip while paused: both songs recorded', join(',', map { $_->{title} } reverse @{ entries() }), 'A,B');
+
+# The restart title check is ONLY for a stream that shares one url. A service track whose title
+# falls back to LMS's row name just after a restart is still the resumed track: dropped on its url.
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = { 'qobuz://r1.flac' =>
+    { title => 'R1', artist => 'R Band', album => 'R Album', albumId => 'qr1', duration => 200 } };
+play($kitchen, remoteTrack(url => 'qobuz://r1.flac', title => 'R1 by R Band from R Album'));
+restart();
+delete $Slim::Player::ProtocolHandlers::META{qobuz}{'qobuz://r1.flac'}{title};   # no handler title yet
+play($kitchen, remoteTrack(url => 'qobuz://r1.flac', title => 'R1 by R Band from R Album'));
+is('restart, service title not ready: the resumed track is not counted twice', scalar @{ entries() }, 1);
+
+# --- second review of 1.0.15 (2026-09-23) --------------------------------------------------------
+# A seek, THEN a pause and resume: the mark times the stream that began at the seek point, so the
+# resume credits only what played since then, not everything before the resume point.
+fresh();
+$Slim::Player::ProtocolHandlers::META{qobuz} = { 'qobuz://long.flac' =>
+    { title => 'Long', artist => 'L', album => 'L LP', albumId => 'qlong', duration => 600 } };
+play($kitchen, remoteTrack(url => 'qobuz://long.flac', title => 'Long'), duration => 600, listen => 0);
+$kitchen->{song}{startOffset} = 480;              # seek to 8:00
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+$kitchen->{elapsed} = 30;                         # 8:30, pause
+pause($kitchen);
+TestClock::advance(600);
+$kitchen->{song}{startOffset} = 510;              # LMS re-streams from 8:30
+$kitchen->{elapsed} = 0;
+event($kitchen, 'newsong');
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('seek then pause: 30s heard is credited, not 510s', $due > 400);
+$kitchen->{elapsed} = 30;                         # plays to 9:00
+Slim::Utils::Timers::fire_timer($kitchen);
+is('seek then pause: a minute of a ten-minute track is not a listen', scalar @{ entries() }, 0);
+
+# CONTROL: resumed twice from the top: 100s, then 50s more, are both credited.
+fresh();
+play($kitchen, qp(1), listen => 0);
+$kitchen->{elapsed} = 100; pause($kitchen);
+$kitchen->{song}{startOffset} = 100; $kitchen->{elapsed} = 0; event($kitchen, 'newsong');
+$kitchen->{elapsed} = 50;  pause($kitchen);
+$kitchen->{song}{startOffset} = 150; $kitchen->{elapsed} = 0; event($kitchen, 'newsong');
+$due = ($Slim::Utils::Timers::ARMED[0]{when} // 1e12) - TestClock::now();
+ok('CONTROL two resumes: 150s credited, 30s owed', $due <= 30);
+
+# --- full check of 1.0.15 (2026-09-23) -------------------------------------------------------------
+# Radio Paradise's first song not yet described when its 60s check comes round (no length): it is
+# taken for a station. Every later song is on the same url; one WITH a length is a track, not a
+# station title change, or nothing more is recorded until the player stops.
+fresh();
+rpSong('Undescribed', 0, 0);
+$kitchen->{elapsed} = 60;
+Slim::Utils::Timers::fire_timer($kitchen);        # timed out as a station, nothing recorded
+is('RP first song undescribed: nothing recorded for it', scalar @{ entries() }, 0);
+rpSong('Second', 200, 0);
+ok('RP after a station guess: the next song is timed', scalar @Slim::Utils::Timers::ARMED);
+$kitchen->{elapsed} = 185;
+Slim::Utils::Timers::fire_timer($kitchen);
+is('RP after a station guess: the next song is recorded', join(',', map { $_->{title} } @{ entries() }), 'Second');
+
+delete $Slim::Player::ProtocolHandlers::META{radioparadise};
 
 main::done();

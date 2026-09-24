@@ -114,9 +114,9 @@
 
 <header class="hero">
   <h1>Listening History — LMS Plugin</h1>
-  <p class="tagline">A plugin for <strong>Lyrion Music Server (LMS)</strong> that keeps a full history of what you've played, on <strong>every player</strong>, from your <strong>local library</strong> and from <strong>streaming services</strong> (Qobuz, Tidal, Deezer, Spotify and others), plus internet radio. Play a whole album and it's logged as <strong>one album</strong>, not a dozen separate tracks. Play one track and it's logged as that track. Every entry plays again with one tap, streaming ones included.</p>
+  <p class="tagline">A plugin for <strong>Lyrion Music Server (LMS)</strong> that keeps a full history of what you've played, on <strong>every player</strong>, from your <strong>local library</strong> and from <strong>streaming services</strong> (Qobuz, Tidal, Deezer, Spotify and others), plus Radio Paradise song by song. Play a whole album and it's logged as <strong>one album</strong>, not a dozen separate tracks. Play one track and it's logged as that track. Every entry plays again with one tap, streaming ones included.</p>
   <div class="badges">
-    <span class="badge accent">v1.0.14</span>
+    <span class="badge accent">v1.0.18</span>
     <span class="badge">LMS 9.0.0+</span>
     <span class="badge">Material Skin</span>
     <span class="badge">Library + Streaming + Radio</span>
@@ -135,11 +135,12 @@
 <div class="card"><h4>Every player</h4><p>Every player on the server is recorded; browse by player to see what played where</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Library and streaming</h4><p>Local files and any streaming service, in one history</p><span class="needs">Needs: The service's own plugin</span></div>
 <div class="card"><h4>Looks like LMS</h4><p>An album reads album over artist, a single track reads track and album over artist, and streaming entries carry the service's badge on the artwork</p><span class="needs">Needs: Badge: a Material Skin newer than 6.4.9</span></div>
-<div class="card"><h4>Plays again</h4><p>Tap an entry to play it: a whole album, the single track, or the radio station</p><span class="needs">Needs: The service's own plugin</span></div>
+<div class="card"><h4>Plays again</h4><p>Tap an entry to play it: a whole album or the single track</p><span class="needs">Needs: The service's own plugin</span></div>
 <div class="card"><h4>Material home shelf</h4><p>A <em>Listening History</em> row of your latest 50 entries on the home screen</p><span class="needs">Needs: Material Skin</span></div>
 <div class="card"><h4>Look further back</h4><p>Browse by date, artist, release, service or player, or search by text, a date, a year or a range of either</p><span class="needs">Needs: nothing</span></div>
 <div class="card"><h4>Sort any list</h4><p>Newest first, artist A–Z or album A–Z</p><span class="needs">Needs: nothing</span></div>
-<div class="card"><h4>Radio too</h4><p>A station is logged once per listening session</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Keeps up with your library</h4><p>After a rescan, retag or move, library entries find their album again and take its current names</p><span class="needs">Needs: nothing</span></div>
+<div class="card"><h4>Radio Paradise too</h4><p>Each song is logged as a track, with its title and artist</p><span class="needs">Needs: The Radio Paradise plugin</span></div>
 <div class="card"><h4>Its own database</h4><p>Nothing is lost when the server restarts, and you choose how long to keep it</p><span class="needs">Needs: nothing</span></div>
 </div>
 </section>
@@ -165,11 +166,20 @@
 </li>
 <li><strong>Back-to-back tracks from one album become one album entry.</strong> The first track appears as a track; as soon as a second track from the same album plays, the entry turns into an album and its count goes up with every further track.
 </li>
-<li><strong>A new album, a stop, or a cleared queue starts a new entry.</strong> So does a gap longer than 30 minutes between two tracks.
+<li><strong>A new album, a stop, or a cleared queue starts a new entry.</strong> So does a gap longer than 30 minutes between two tracks. Time spent paused doesn't count towards that gap, so a long pause doesn't split an album.
 </li>
 <li><strong>A server restart doesn't split anything.</strong> If an album carries on after the server restarts, it stays one entry, and a track already counted isn't counted again.
 </li>
-<li><strong>Radio</strong> is recorded once per listening session, named after the station, 60 seconds after it starts. Song-title changes within the stream don't add entries.
+<li><strong>Internet radio stations aren't recorded.</strong> Radio Paradise is the exception: it names every song, so each song is recorded as a track once 90% of it has played. Station entries recorded by an earlier version stay in your history and still play.
+</li></ul>
+<h3>When your library changes</h3>
+<p>A rescan, a retag or moving files can give an album a new place in LMS's library. Library entries follow it:</p>
+<ul>
+<li><strong>Each entry finds its album again</strong> the way LMS finds a favourite: by the album's MusicBrainz id where your files have one, otherwise by the files you played, otherwise by the album and artist name. Tapping it plays the whole album again, and it stays under the right type in <em>By release</em>.
+</li>
+<li><strong>Names follow the library.</strong> An album entry takes the album's current title, artist and year; a track entry also takes its track's current title and artist. The tracks recorded inside an entry keep the names you heard them under.
+</li>
+<li><strong>Every library entry is checked shortly after each rescan finishes</strong>, and two minutes after the server starts. An entry you open is checked straight away. Until then, an entry whose album moved may show its old name and a blank cover.
 </li></ul>
 <h3>Browsing</h3>
 <p>Open <strong>My Apps → Listening History</strong>:</p>
@@ -184,7 +194,7 @@
 <tr><td><strong>By date</strong></td><td>Today, Yesterday, then each year → <em>All of</em> the year, or a month → day</td></tr>
 <tr><td><strong>By artist</strong></td><td>Every artist you've played, with a count</td></tr>
 <tr><td><strong>By release</strong></td><td>Your releases split by type, the way LMS does: <em>Albums</em>, <em>EPs</em>, <em>Singles</em>, <em>Compilations</em>. Each opens its releases, with the service badge of the latest play. Library releases use the type from your tags; Qobuz states its own. Releases from other services are listed as albums</td></tr>
-<tr><td><strong>By service</strong></td><td>Library, Qobuz, Spotify, Radio and so on, each with its own history</td></tr>
+<tr><td><strong>By service</strong></td><td>Library, Qobuz, Spotify, Radio Paradise and so on, each with its own history</td></tr>
 <tr><td><strong>By player</strong></td><td>Each player, with its history</td></tr>
 </tbody></table>
 <p>Rows read the way LMS shows any release:</p>
@@ -193,7 +203,7 @@
 </li>
 <li><strong>Track</strong>: the track and its album, with the artist underneath, e.g. <em>Live By You from Radical Frame</em> over <em>Actress</em>. The Default and Classic web skins show it on one line, the way LMS names a favourite track: <em>Live By You by Actress from Radical Frame</em>.
 </li>
-<li><strong>Radio</strong>: the station's name.
+<li><strong>A station</strong> recorded by an earlier version: the station's name.
 </li></ul>
 <p>On the Material Skin, an entry from a streaming service carries that service's badge on its artwork; library entries have none, as in Material's own library lists. The badge needs a Material Skin newer than 6.4.9. Which player an entry played on and when aren't shown on the row: use <strong>By player</strong>, <strong>By date</strong> or a date or year search.</p>
 <p>Every list starts with a <strong>Sorted by</strong> row: tap it to switch between <em>date</em> (newest first), <em>artist A–Z</em> and <em>album A–Z</em>. The choice is remembered. The home shelf always shows the newest first.</p>
@@ -208,7 +218,7 @@
 </li>
 <li><strong>Track</strong>: plays that track.
 </li>
-<li><strong>Radio</strong>: plays the station.
+<li><strong>A station</strong> recorded by an earlier version: plays the station.
 </li></ul>
 <p>Use the row's <strong>… → More → Remove from history</strong> to delete an entry.</p>
 </section>
@@ -223,7 +233,6 @@
 <tbody>
 <tr><td>Track counts as played at</td><td>90 %</td><td>How much of a track must play before it's recorded</td></tr>
 <tr><td>Album session gap</td><td>30 minutes</td><td>The longest pause between two tracks that still groups them into one album</td></tr>
-<tr><td>Record internet radio</td><td>On</td><td>Whether stations are recorded</td></tr>
 <tr><td>Keep history for</td><td>0 days (forever)</td><td>Entries older than this are removed once a day</td></tr>
 </tbody></table>
 </section>
@@ -233,8 +242,6 @@
 <li><strong>History starts when the plugin is installed.</strong> Nothing is imported from before then.
 </li>
 <li><strong>Bandcamp albums replay as the tracks you heard</strong>, because a playing Bandcamp track doesn't tell us which album page it came from.
-</li>
-<li><strong>Radio detection is by stream type</strong>: any stream with no fixed length that isn't a known music service counts as radio.
 </li>
 <li><strong>Search is case-insensitive for plain letters only</strong> (A–Z). Accented letters and other scripts match with exact case.
 </li></ul>

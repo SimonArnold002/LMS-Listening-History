@@ -245,6 +245,40 @@ sub setReleaseType {
     return $ok;
 }
 
+# Point a LIBRARY entry at its album again (Sources::libraryAlbum), store the album's lasting
+# keys on it, and bring its names in line with the library's (Simon, 2026-09-24: history follows
+# the library). Compare-and-set: written only while the entry is still a library entry whose
+# ref.album_id is $expect, so a promotion or a Remove in between wins. The keys are merged into
+# the ref as it is NOW; album_key follows only where it was the old "lib:<id>"; artwork and the
+# names (album, artist, title, year) only when given. Plays are never touched: the play log keeps
+# what was heard. Returns true on a write.
+my %RELINK_KEYS  = map { $_ => 1 } qw(album_id album_mbid track_mbid album_url);
+my @RELINK_NAMES = qw(album artist title year);
+
+sub relinkLibrary {
+    my ($id, $expect, $new) = @_;
+    return 0 unless defined $id && $id =~ /^\d+$/ && defined $expect && ref $new eq 'HASH'
+        && defined $new->{album_id} && $new->{album_id} =~ /^\d+$/;
+    return 0 if defined $new->{year} && $new->{year} !~ /^\d{4}$/;
+    my $ok = 0;
+    _txn('relinking a library album', sub {
+        my ($h) = @_;
+        my $row = $h->selectrow_hashref('SELECT source, ref_json, album_key FROM entries WHERE id = ?',
+            undef, $id) or return;
+        return unless ($row->{source} // '') eq 'library';
+        my $ref = eval { $JSON->decode($row->{ref_json} // '{}') } || {};
+        return unless defined $ref->{album_id} && $ref->{album_id} eq $expect;
+        $ref->{$_} = $new->{$_} for grep { $RELINK_KEYS{$_} && defined $new->{$_} } keys %$new;
+        my $key = ($row->{album_key} // '') eq "lib:$expect" ? "lib:$new->{album_id}" : $row->{album_key};
+        my @names = grep { defined $new->{$_} } @RELINK_NAMES;
+        $h->do('UPDATE entries SET ref_json = ?, album_key = ?, artwork = COALESCE(?, artwork)'
+            . join('', map { ", $_ = ?" } @names) . ' WHERE id = ?',
+            undef, $JSON->encode($ref), $key, $new->{artwork}, @{$new}{@names}, $id);
+        $ok = 1;
+    }) or return 0;
+    return $ok;
+}
+
 sub _insertPlay {
     my ($h, $entryId, $p, $when) = @_;
     $h->do('INSERT INTO plays (entry_id, url, title, artist, album, duration, played_at)
@@ -358,6 +392,19 @@ sub search {
         "artist $like OR album $like OR title $like OR player_name $like"
         . " OR id IN (SELECT entry_id FROM plays WHERE title $like)",
         [ ($pat) x 5 ]);
+}
+
+# Library entries after $afterId, oldest id first, at most $limit: the rescan sweep's cursor
+# (Sources::sweepTick). Keyed on id, not played_at, so an entry played while the sweep runs
+# neither repeats nor is skipped.
+sub libraryAfter {
+    my ($afterId, $limit) = @_;
+    my $h = dbh() or return [];
+    my $rows = eval { $h->selectall_arrayref(
+        q{SELECT * FROM entries WHERE source = 'library' AND id > ? ORDER BY id LIMIT ?},
+        { Slice => {} }, ($afterId // 0) + 0, $limit || 25) };
+    $log->error("Listening History: read failed: $@") if $@;
+    return [ map { _decode($_) } @{ $rows || [] } ];
 }
 
 # The tracks that were played for an entry, in the order they were played.

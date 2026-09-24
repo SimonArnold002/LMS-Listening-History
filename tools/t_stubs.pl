@@ -161,21 +161,79 @@ BEGIN { *CORE::GLOBAL::time = sub () { CORE::time() + ($TestClock::OFFSET || 0) 
 
 # Slim::Schema: a test registers library albums with add_test_album; search('Track',
 # {'album.id' => $id}) then counts / iterates exactly those tracks, and nothing else.
+# An album exists while it has tracks or meta. ALBUM_META may also carry musicbrainz_id, title,
+# artist (its contributor name, for the db: url) and artwork; TRACK_MBID maps a track url to its
+# recording MBID. objectForUrl answers a registered track url, or a db:album url by title + artist
+# (first match, as LMS's _objForDbUrl does). $SCANNING stands in for Import->stillScanning.
 {
     package Slim::Schema;
     our %ALBUM_TRACKS;   # album id => [ [title, url], … ]
-    our %ALBUM_META;     # album id => { release_type, compilation }
+    our %ALBUM_META;     # album id => { release_type, compilation, musicbrainz_id, title, artist, artwork }
+    our %TRACK_MBID;     # track url => recording MBID
+    our %TRACK_ARTIST;   # track url => its artist (artistName)
     sub add_test_album { my ($id, @tracks) = @_; $ALBUM_TRACKS{$id} = \@tracks }
+    sub _album {
+        my ($id) = @_;
+        return undef unless defined $id && ($ALBUM_META{$id} || $ALBUM_TRACKS{$id});
+        return bless { %{ $ALBUM_META{$id} || {} }, id => $id }, 'Slim::Schema::FakeAlbum';
+    }
     sub find {
         my (undef, $kind, $id) = @_;
-        return undef unless $kind eq 'Album' && $ALBUM_META{ $id // '' };
-        return bless { %{ $ALBUM_META{$id} } }, 'Slim::Schema::FakeAlbum';
+        return undef unless $kind eq 'Album';
+        return _album($id);
+    }
+    sub _track {
+        my ($url) = @_;
+        for my $id (sort { $a <=> $b } keys %ALBUM_TRACKS) {
+            for my $t (@{ $ALBUM_TRACKS{$id} }) {
+                return bless { title => $t->[0], url => $t->[1], album_id => $id }, 'Slim::Schema::FakeTrack'
+                    if $t->[1] eq $url;
+            }
+        }
+        return undef;
+    }
+    sub objectForUrl {
+        my (undef, $args) = @_;
+        my $url = ref $args eq 'HASH' ? $args->{url} : $args;
+        return undef unless defined $url;
+        if ($url =~ /^db:album\.title=([^&]*)&contributor\.name=(.*)$/) {
+            require URI::Escape;
+            my ($t, $n) = map { my $v = URI::Escape::uri_unescape($_); utf8::decode($v); $v } ($1, $2);
+            for my $id (sort { $a <=> $b } keys %ALBUM_META) {
+                my $m = $ALBUM_META{$id};
+                return _album($id) if ($m->{title} // '') eq $t && ($m->{artist} // '') eq $n;
+            }
+            return undef;
+        }
+        return _track($url);
     }
     package Slim::Schema::FakeAlbum;
     sub release_type { $_[0]->{release_type} } sub compilation { $_[0]->{compilation} }
+    sub id { $_[0]->{id} } sub musicbrainz_id { $_[0]->{musicbrainz_id} } sub artwork { $_[0]->{artwork} }
+    sub title { $_[0]->{title} } sub year { $_[0]->{year} }
+    sub contributor { defined $_[0]->{artist} ? bless({ n => $_[0]->{artist} }, 'Slim::Schema::FakeContrib') : undef }
+    sub url {
+        my $s = shift;
+        return undef unless defined $s->{title} && defined $s->{artist};
+        require URI::Escape;
+        return sprintf('db:album.title=%s&contributor.name=%s',
+            URI::Escape::uri_escape_utf8($s->{title}), URI::Escape::uri_escape_utf8($s->{artist}));
+    }
     package Slim::Schema;
     sub search {
         my (undef, $kind, $cond) = @_;
+        my @rows;
+        if (ref $cond eq 'HASH' && exists $cond->{musicbrainz_id}) {
+            my $m = $cond->{musicbrainz_id};
+            if ($kind eq 'Album') {
+                @rows = map { _album($_) }
+                        grep { ($ALBUM_META{$_}{musicbrainz_id} // '') eq $m } sort { $a <=> $b } keys %ALBUM_META;
+            }
+            else {
+                @rows = map { _track($_) } grep { $TRACK_MBID{$_} eq $m } sort keys %TRACK_MBID;
+            }
+            return bless { rows => \@rows }, 'Slim::Schema::Rs';
+        }
         my $id = ref $cond eq 'HASH' ? $cond->{'album.id'} : undef;
         my @t = @{ $ALBUM_TRACKS{ $id // '' } || [] };
         return bless { t => \@t }, 'Slim::Schema::Rs';
@@ -183,9 +241,21 @@ BEGIN { *CORE::GLOBAL::time = sub () { CORE::time() + ($TestClock::OFFSET || 0) 
     package Slim::Schema::Rs;
     sub count { return scalar @{ $_[0]->{t} } }
     sub next  { my $r = shift @{ $_[0]->{t} } or return undef; return bless { title => $r->[0], url => $r->[1] }, 'Slim::Schema::FakeTrack' }
+    sub all   { return grep { defined } @{ $_[0]->{rows} || [] } }
     package Slim::Schema::FakeTrack;
     sub title { $_[0]->{title} } sub url { $_[0]->{url} }
+    sub album { Slim::Schema::_album($_[0]->{album_id}) }
+    sub musicbrainz_id { $Slim::Schema::TRACK_MBID{ $_[0]->{url} // '' } }
+    sub artistName { $Slim::Schema::TRACK_ARTIST{ $_[0]->{url} // '' } }
+    package Slim::Schema::FakeContrib;
+    sub name { $_[0]->{n} }
     $INC{'Slim/Schema.pm'} = __FILE__;
+}
+{
+    package Slim::Music::Import;
+    our $SCANNING = 0;
+    sub stillScanning { $SCANNING }
+    $INC{'Slim/Music/Import.pm'} = __FILE__;
 }
 
 {

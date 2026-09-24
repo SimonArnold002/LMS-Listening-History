@@ -70,12 +70,6 @@ PLUGIN_LH_GAP
 PLUGIN_LH_GAP_DESC
 	EN	Two tracks from the same album played back to back become one album entry. If more than this many minutes pass between them, the second starts a new entry.
 
-PLUGIN_LH_RADIO
-	EN	Record internet radio
-
-PLUGIN_LH_RADIO_DESC
-	EN	Record a radio station once per listening session, as an entry that plays the station again.
-
 PLUGIN_LH_SECTION_STORAGE
 	EN	Storage
 
@@ -90,9 +84,6 @@ PLUGIN_LH_DAYS
 
 PLUGIN_LH_MINUTES
 	EN	minutes
-
-PLUGIN_LH_ENABLED
-	EN	Enabled
 
 PLUGIN_LH_BY_SERVICE
 	EN	By service

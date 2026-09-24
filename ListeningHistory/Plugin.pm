@@ -34,7 +34,6 @@ my $prefs = preferences('plugin.listeninghistory');
 $prefs->init({
     played_threshold => 90,   # % of a track that must play before it is recorded
     session_gap_min  => 30,   # minutes between two tracks that still group into one album
-    record_radio     => 1,    # record internet radio stations
     retention_days   => 0,    # remove entries older than this; 0 keeps everything
     sort             => 'date', # entry-list order: date | artist | album (the view's sort row)
 });
@@ -82,6 +81,16 @@ sub postinitPlugin {
     # Retention: first pass shortly after startup, then daily.
     Slim::Utils::Timers::killTimers(undef, \&_purgeTick);
     Slim::Utils::Timers::setTimer(undef, time() + 60, \&_purgeTick);
+
+    # Library check (Sources::sweepTick): after every rescan, and once after startup in case a
+    # scan finished while the plugin was not running.
+    Slim::Control::Request::subscribe(\&_onRescanDone, [['rescan'], ['done']]);
+    Plugins::ListeningHistory::Sources::startSweep(120);
+    return;
+}
+
+sub _onRescanDone {
+    Plugins::ListeningHistory::Sources::startSweep(10);
     return;
 }
 
@@ -123,6 +132,8 @@ sub _removeCommand {
 sub shutdownPlugin {
     eval { Plugins::ListeningHistory::Tracker->shutdown; 1 }
         or $log->error("Listening History: tracker shutdown failed: $@");
+    Slim::Control::Request::unsubscribe(\&_onRescanDone);
+    Plugins::ListeningHistory::Sources::stopSweep();
     return;
 }
 
