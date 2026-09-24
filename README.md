@@ -1,6 +1,6 @@
 # Listening History — LMS Plugin
 
-A plugin for **Lyrion Music Server (LMS)** that keeps a full history of what you've played, on **every player**, from your **local library** and from **streaming services** (Qobuz, Tidal, Deezer, Spotify and others), plus Radio Paradise song by song. Play a whole album and it's logged as **one album**, not a dozen separate tracks. Play one track and it's logged as that track. Every entry plays again with one tap, streaming ones included.
+A plugin for **Lyrion Music Server (LMS)** that keeps a full history of what you've played, on **every player**, from your **local library** and from **streaming services** (Qobuz, Tidal, Deezer, Spotify and others), plus Radio Paradise's interactive streams song by song. Play a whole album and it's logged as **one album**, not a dozen separate tracks. Play one track and it's logged as that track. Every entry plays again with one tap, streaming ones included.
 
 Tested on LMS 9.x with the **Material Skin**.
 
@@ -19,7 +19,7 @@ Tested on LMS 9.x with the **Material Skin**.
 | **Look further back** | Browse by date, artist, release, service or player, or search by text, a date, a year or a range of either | Nothing |
 | **Sort any list** | Newest first, artist A–Z or album A–Z | Nothing |
 | **Keeps up with your library** | After a rescan, retag or move, library entries find their album again and take its current names | Nothing |
-| **Radio Paradise too** | Each song is logged as a track, with its title and artist | The Radio Paradise plugin |
+| **Radio Paradise too** | Each song on an interactive stream is logged as a track, with its title and artist | The Radio Paradise plugin, playing an interactive stream |
 | **Its own database** | Nothing is lost when the server restarts, and you choose how long to keep it | Nothing |
 
 ---
@@ -51,7 +51,7 @@ Then install **Listening History** from the plugin list and restart the server.
 - **Back-to-back tracks from one album become one album entry.** The first track appears as a track; as soon as a second track from the same album plays, the entry turns into an album and its count goes up with every further track.
 - **A new album, a stop, or a cleared queue starts a new entry.** So does a gap longer than 30 minutes between two tracks. Time spent paused doesn't count towards that gap, so a long pause doesn't split an album.
 - **A server restart doesn't split anything.** If an album carries on after the server restarts, it stays one entry, and a track already counted isn't counted again.
-- **Internet radio stations aren't recorded.** Radio Paradise is the exception: it names every song, so each song is recorded as a track once 90% of it has played. Station entries recorded by an earlier version stay in your history and still play.
+- **Internet radio stations aren't recorded.** Radio Paradise's **interactive** streams, played through the Radio Paradise plugin, are the exception: they give every song its own title, artist and length, so each song is recorded as a track once 90% of it has played. Radio Paradise's regular streams don't: they're a continuous station with no song lengths or timeline, so they're treated like any other station and not recorded. Station entries recorded by an earlier version stay in your history and still play.
 
 ### When your library changes
 
